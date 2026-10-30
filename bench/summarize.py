@@ -105,6 +105,45 @@ def stats(path, rate=1e-5, rounds=200, min_set=20):
                 set_mean=set_mean, nsets=len(sets))
 
 
+OVERLAP_BINS = (0, 0.5, 0.75, 0.9, 1.01)
+
+
+def overlap(probe, templates, size=pub.SIZE):
+    """Share of the probe patch covered by the union of the enrolled patches,
+    from patch centre offsets in a common frame."""
+    u = np.arange(size) - size / 2 + 0.5
+    cover = np.zeros((size, size), bool)
+    for t in templates:
+        my = np.abs(probe[0] + u - t[0]) < size / 2
+        mx = np.abs(probe[1] + u - t[1]) < size / 2
+        cover |= my[:, None] & mx[None, :]
+    return cover.mean()
+
+
+def overlap_frr(path):
+    """Registered FRR at the zero-FA threshold, by overlap of the probe with the
+    enrolled area: [(n, frr)] per OVERLAP_BINS bin; None without offsets."""
+    d = np.load(path, allow_pickle=False)
+    if "poff" not in d.files:
+        return None
+    M, powner, paligned, poff, toff = d["M"], d["powner"], d["paligned"], d["poff"], d["toff"]
+    keep = list(d["keep"])
+    col = {k: j for j, k in enumerate(keep)}
+    _, _, imp, _, _ = part_b(path)
+    zt = int(imp.max()) + 1
+    ov, ok = [], []
+    for pi, k in enumerate(powner):
+        if k in col and paligned[pi]:
+            ov.append(overlap(poff[pi], toff[col[k]]))
+            ok.append(M[pi, col[k]] >= zt)
+    ov, ok = np.array(ov), np.array(ok)
+    out = []
+    for lo, hi in zip(OVERLAP_BINS, OVERLAP_BINS[1:]):
+        b = (ov >= lo) & (ov < hi)
+        out.append((int(b.sum()), (~ok[b]).mean() if b.any() else float("nan")))
+    return out
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "."
     bs = sorted(glob.glob(os.path.join(out, "big_eval_b_*.npz")))
@@ -154,6 +193,18 @@ def main():
                   f"| {100 * r['frr']:.1f}% ({100 * r['frr_lo']:.1f}-{100 * r['frr_hi']:.1f}%) "
                   f"| {r['kt']} (k={r['k']}) | {100 * r['frr_k']:.1f}% "
                   f"| {100 * r['set_mean']:.1f}% ({r['nsets']} sets) |")
+    ov = [(matcher_of(p, "big_eval_b_"), overlap_frr(p)) for p in bs]
+    ov = [(m, r) for m, r in ov if r]
+    if ov:
+        print("\n### FRR by overlap with the enrolled area\n")
+        print("Registered genuine attempts at each matcher's zero-FA threshold, by the share of "
+              "the probe patch covered by the enrolled patches (from the patch offsets; rotation "
+              "between impressions is ignored).\n")
+        bins = [f"{int(100 * lo)}-{int(100 * min(hi, 1))}%" for lo, hi in zip(OVERLAP_BINS, OVERLAP_BINS[1:])]
+        print("| matcher | run | " + " | ".join(bins) + " |")
+        print("|---|---|" + "---|" * len(bins))
+        for (name, run), r in ov:
+            print(f"| {name} | {run or '-'} | " + " | ".join(f"{100 * f:.1f}% (n={n})" for n, f in r) + " |")
     cs = sorted(glob.glob(os.path.join(out, "big_eval_c_*.npz")))
     if cs:
         print("\n## Strangers only (part C)\n")

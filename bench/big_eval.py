@@ -102,10 +102,14 @@ def ridge_ratio(p):
     return spec[(r >= s / 16) & (r <= s / 7)].sum() / spec[(r >= 2) & (r <= s / 2)].sum()
 
 
-def patch_at(img, cy, cx):
+def patch_origin(img, cy, cx):
     h, w = img.shape
-    y = int(round(min(max(cy - pub.SIZE / 2, 0), h - pub.SIZE)))
-    x = int(round(min(max(cx - pub.SIZE / 2, 0), w - pub.SIZE)))
+    return (int(round(min(max(cy - pub.SIZE / 2, 0), h - pub.SIZE))),
+            int(round(min(max(cx - pub.SIZE / 2, 0), w - pub.SIZE))))
+
+
+def patch_at(img, cy, cx):
+    y, x = patch_origin(img, cy, cx)
     p = img[y:y + pub.SIZE, x:x + pub.SIZE]
     if p.std() < 10:  # mostly background
         return None
@@ -138,13 +142,20 @@ def aligned_centre(img, ref):
     return float(y), float(x)
 
 
-def jittered(img, n, jitter, rng, at=None):
+def jittered(img, n, jitter, rng, at=None, offsets=None):
+    """Up to @n usable patches around @at (default: the fingerprint centre).
+    With a list as @offsets, appends the (y, x) offset of each patch centre
+    from @at to it."""
     cy, cx = at if at else centre(img)
     out = []
     for _ in range(n * 3):
-        p = patch_at(img, cy + rng.gauss(0, jitter), cx + rng.gauss(0, jitter))
+        py, px = cy + rng.gauss(0, jitter), cx + rng.gauss(0, jitter)
+        p = patch_at(img, py, px)
         if p is not None:
             out.append(p)
+            if offsets is not None:
+                y, x = patch_origin(img, py, px)
+                offsets.append((y + pub.SIZE / 2 - cy, x + pub.SIZE / 2 - cx))
         if len(out) == n:
             break
     return out
@@ -200,17 +211,20 @@ def run_a(idx, dataset):
 def feat_worker(job):
     """Features of patches from one impression; with a reference impression of
     the same finger, patches are placed where that impression's centre is.
-    Returns (features, alignment: None | True | False)."""
+    Patch offsets are from the centre of the first enrollment impression, in
+    that impression's coordinates when registered (rotation is ignored).
+    Returns (features, alignment: None | True | False, offsets)."""
     path, dpi, n, jitter, seed, ref = job
     rng = random.Random(seed)
     img = load_scaled(path, dpi)
     if img is None or min(img.shape) < pub.SIZE:
-        return [], None
+        return [], None, []
     at = aligned = None
     if ref:
         at = aligned_centre(img, load_scaled(*ref))
         aligned = at is not None
-    return [MATCH.features_img(p) for p in jittered(img, n, jitter, rng, at)], aligned
+    off = []
+    return [MATCH.features_img(p) for p in jittered(img, n, jitter, rng, at, off)], aligned, off
 
 
 def best(f, gallery):
@@ -251,18 +265,20 @@ def run_b(idx, stages, jitter, nprobes):
     with pool() as p:
         flat = progress_map(p, feat_worker, [j for js in tjobs for j in js], "template features", 8)
         probes_nested = progress_map(p, feat_worker, pjobs, "probe features", 8)
-    templates, pos = [], 0
+    templates, toff, pos = [], [], 0
     for js in tjobs:
-        feats = [x for r, _ in flat[pos:pos + len(js)] for x in r][:stages]
+        feats = [x for r, _, _ in flat[pos:pos + len(js)] for x in r][:stages]
+        toff.append([o for _, _, off in flat[pos:pos + len(js)] for o in off][:stages])
         pos += len(js)
         templates.append(feats)
-    probes, powner, paligned = [], [], []
-    for k, (r, aligned) in zip(owners, probes_nested):
-        for x in r:
+    probes, powner, paligned, poff = [], [], [], []
+    for k, (r, aligned, off) in zip(owners, probes_nested):
+        for x, o in zip(r, off):
             probes.append(x)
             powner.append(k)
             paligned.append(bool(aligned))
-    al = [a for _, a in flat + probes_nested if a is not None]
+            poff.append(o)
+    al = [a for _, a, _ in flat + probes_nested if a is not None]
     print(f"   impressions registered to the enrollment impression: {sum(al)}/{len(al)}")
     keep = [i for i, tm in enumerate(templates) if len(tm) == stages]
     print(f"\n=== B. simulated enroll/verify: {len(keep)} public fingers, {stages} stages, "
@@ -279,7 +295,9 @@ def run_b(idx, stages, jitter, nprobes):
     print(f"   {M.size} probe x template comparisons in {time.time() - t:.0f}s")
 
     np.savez_compressed(os.path.join(OUT_DIR, f"big_eval_b_{MATCHER_NAME}{RUN_SUFFIX}.npz"), M=M, powner=powner,
-                        paligned=paligned, keep=keep, names=names, setname=setname, ident=ident)
+                        paligned=paligned, keep=keep, names=names, setname=setname, ident=ident,
+                        poff=np.float32(poff).reshape(-1, 2),
+                        toff=np.float32([toff[i] for i in keep]).reshape(len(keep), stages, 2))
 
     gen, gen_al, imp, worst, same = [], [], [], [], []
     for pi, k in enumerate(powner):
