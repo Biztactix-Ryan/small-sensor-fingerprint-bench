@@ -112,7 +112,13 @@ def identity(finger_id):
     # visibly the same finger on both sensors, and same-numbered pairs score up
     # to 14 where strangers never exceed 8. Other FVC DB pairs score like
     # strangers (max 5), so they stay separate identities.
-    return re.sub(r"^fvc2000_DB[12]_B/", "fvc2000_DB12/", finger_id)
+    finger_id = re.sub(r"^fvc2000_DB[12]_B/", "fvc2000_DB12/", finger_id)
+    # Tsinghua Distorted: folders are recordings, not fingers; many fingers
+    # were recorded several times (normal impressions of different folders
+    # match with up to ~370 inliers, mostly between nearby folder numbers)
+    # and the duplicates can't be told apart from chance matches reliably.
+    # Never count Tsinghua against Tsinghua as an impostor attempt.
+    return re.sub(r"^tsinghua/.*", "tsinghua", finger_id)
 
 
 def ridge_period(img):

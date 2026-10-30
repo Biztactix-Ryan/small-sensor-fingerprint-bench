@@ -28,7 +28,11 @@ does not state it or states it wrongly.
 DB4 of each FVC year is synthetic (SFinGe). FVC2000 DB1 and DB2 share
 volunteers and finger numbering, and the two Neurotechnology sets are the same
 people on two sensors: `public_sets.identity()` treats those as one finger so
-they are never counted as impostors of each other.
+they are never counted as impostors of each other. Tsinghua's folders are
+recordings rather than fingers: many fingers were recorded more than once
+(folder pairs whose normal impressions match with hundreds of inliers, mostly
+nearby folder numbers), so Tsinghua is never used against itself as an
+impostor, only against the other sets.
 
 Expected layout:
 
