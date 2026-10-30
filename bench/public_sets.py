@@ -9,6 +9,7 @@ against the 500dpi sets (ridge period from the FFT spectrum):
 See docs/SCALING.md.
 """
 import glob
+import hashlib
 import os
 import re
 import sys
@@ -73,9 +74,17 @@ def index():
                 out.append((name, f"{name}/{finger}", os.path.splitext(os.path.basename(p))[0], p))
             continue
         if name == "unsw2d":
-            for p in glob.glob(os.path.join(d, "*", "*.*")):
+            # 25 impressions are byte-identical copies of another impression of
+            # the same finger (all of subject 6: 1 = 3, 2 = 4); keep one
+            seen = set()
+            for p in sorted(glob.glob(os.path.join(d, "*", "*.*"))):
                 m = re.fullmatch(r"(\d+)_(\d+)_(\d+)\.bmp", os.path.basename(p), re.I)
-                if m:
+                if not m:
+                    continue
+                with open(p, "rb") as f:
+                    key = (m[1], m[2], hashlib.md5(f.read()).digest())
+                if key not in seen:
+                    seen.add(key)
                     out.append((name, f"{name}/{m[1]}_{m[2]}", m[3], p))
             continue
         if name == "minex":
@@ -118,7 +127,10 @@ def identity(finger_id):
     # match with up to ~370 inliers, mostly between nearby folder numbers)
     # and the duplicates can't be told apart from chance matches reliably.
     # Never count Tsinghua against Tsinghua as an impostor attempt.
-    return re.sub(r"^tsinghua/.*", "tsinghua", finger_id)
+    finger_id = re.sub(r"^tsinghua/.*", "tsinghua", finger_id)
+    # UNSW 2D: fingers 8 and 9 of subject 138 match each other with SIGFM
+    # scores in the millions, i.e. the same finger under two labels
+    return "unsw2d/138_8" if finger_id == "unsw2d/138_9" else finger_id
 
 
 def ridge_period(img):
