@@ -102,7 +102,8 @@ def stats(path, rate=1e-5, rounds=200, min_set=20):
     bt, bf = np.array(boot).T
     return dict(zt=zt, frr=frr, zt_lo=int(np.percentile(bt, 5)), zt_hi=int(np.percentile(bt, 95)),
                 frr_lo=np.percentile(bf, 5), frr_hi=np.percentile(bf, 95), k=k, kt=kt, frr_k=frr_k,
-                set_mean=set_mean, nsets=len(sets))
+                set_mean=set_mean, nsets=len(sets),
+                tbytes=float(d["tbytes"].mean()) if "tbytes" in d.files else None)
 
 
 OVERLAP_BINS = (0, 0.5, 0.75, 0.9, 1.01)
@@ -184,15 +185,17 @@ def main():
               "impostor attempts. Per-set average: registered FRR at the zero-FA threshold, mean "
               "over sets with at least 20 registered attempts.\n")
         print("| matcher | run | zero-FA threshold (range) | FRR registered @ zero-FA (range) "
-              "| threshold @ FA <= k | FRR registered @ FA <= k | per-set average FRR @ zero-FA |")
-        print("|---|---|---|---|---|---|---|")
+              "| threshold @ FA <= k | FRR registered @ FA <= k | per-set average FRR @ zero-FA "
+              "| stored bytes per enrolled image |")
+        print("|---|---|---|---|---|---|---|---|")
         for p in bs:
             name, run = matcher_of(p, "big_eval_b_")
             r = stats(p)
             print(f"| {name} | {run or '-'} | {r['zt']} ({r['zt_lo']}-{r['zt_hi']}) "
                   f"| {100 * r['frr']:.1f}% ({100 * r['frr_lo']:.1f}-{100 * r['frr_hi']:.1f}%) "
                   f"| {r['kt']} (k={r['k']}) | {100 * r['frr_k']:.1f}% "
-                  f"| {100 * r['set_mean']:.1f}% ({r['nsets']} sets) |")
+                  f"| {100 * r['set_mean']:.1f}% ({r['nsets']} sets) "
+                  f"| {'-' if r['tbytes'] is None else round(r['tbytes'])} |")
     ov = [(matcher_of(p, "big_eval_b_"), overlap_frr(p)) for p in bs]
     ov = [(m, r) for m, r in ov if r]
     if ov:

@@ -30,6 +30,10 @@ vlsift / ftsift: ours_det with SIFT from a C implementation instead of
     OpenCV's, built by csift/build.sh: VLFeat's (BSD), or the one in the
     FocalTech FT9366 driver of a libfprint fork (LGPL). Without OpenCV in
     the matcher itself; upscale + CLAHE still come from OpenCV here.
+q_pca40 / q_bin128 / q_bin256 / q_tern128: ours_det with SIFT descriptors
+    stored compactly (40, 16, 32 and 32 bytes instead of 128), fit by
+    fit_quant.py on the stranger-only sets; matched by euclidean, Hamming and
+    masked Hamming distance (ternary). Needs kpm/libkpm.so.
 orb / akaze / brisk (+ _raw): the same matcher with binary keypoints and
     descriptors (Hamming distance) instead of SIFT, to see what a matcher
     without SIFT, e.g. one in plain C, would cost.
@@ -69,6 +73,11 @@ def _kpm_lib():
         _kpm.fpi_keypoint_match_score.restype = ctypes.c_uint
         _kpm.fpi_keypoint_match_score.argtypes = (ctypes.POINTER(_Keypoints), ctypes.POINTER(_Keypoints),
                                                   ctypes.c_double, ctypes.c_int, ctypes.c_void_p)
+        if hasattr(_kpm, "fpi_keypoint_match_score_full"):
+            _kpm.fpi_keypoint_match_score_full.restype = ctypes.c_uint
+            _kpm.fpi_keypoint_match_score_full.argtypes = (
+                ctypes.POINTER(_Keypoints), ctypes.POINTER(_Keypoints), ctypes.c_int, ctypes.c_uint,
+                ctypes.c_double, ctypes.c_int, ctypes.c_void_p)
     return _kpm
 _bf_hamming = cv2.BFMatcher(cv2.NORM_HAMMING)
 
@@ -163,6 +172,8 @@ class Ransac:
     def _c_inliers(self, a, b):
         if a[1] is None or b[1] is None:
             return ()
+        # normally converted in load(); never pass other layouts to C
+        a, b = [(np.ascontiguousarray(p, np.float32), np.ascontiguousarray(d, np.uint8)) for p, d in (a, b)]
         ka, kb = [_Keypoints(len(p), p.ctypes.data, d.ctypes.data) for p, d in (a, b)]
         out = np.zeros(len(a[0]), np.uint32)
         flags = (1 if self.mutual else 0) | (2 if self.limit_angle else 0)
@@ -172,6 +183,13 @@ class Ransac:
 
     def score(self, a, b):
         return len(self.inliers(a, b))
+
+    def stored_bytes(self, f):
+        """Bytes of one enrolled image: float32 x, y and the descriptor (SIFT
+        descriptors are stored as bytes)."""
+        if f[1] is None:
+            return 0
+        return len(f[0]) * (8 + (128 if not self.detector else f[1].shape[1]))
 
 
 class CSift(Ransac):
@@ -213,6 +231,58 @@ class Union(Ransac):
             union.update(int(i) for i in self.inliers(probe, g))
         mean = sum(len(g[0]) for g in galleries) // len(galleries)
         return len(union) * 10000 // max(len(probe[0]), mean, 1)
+
+
+class Quant(Ransac):
+    """ours_det on compact codes of its SIFT descriptors, see fit_quant.py."""
+    # metric (fpi-keypoint-match.h) and bytes per descriptor
+    KINDS = {"pca40": (0, 40), "bin128": (1, 16), "bin256": (1, 32), "tern128": (2, 32)}
+    _params = None
+
+    def __init__(self, kind):
+        super().__init__(pre=True, det=True)
+        self.kind = kind
+        self.metric, self.desc_len = self.KINDS[kind]
+
+    @classmethod
+    def params(cls):
+        if cls._params is None:
+            path = os.environ.get("FPBENCH_QUANT", os.path.join(HERE, "..", "quant", "sift_quant.npz"))
+            cls._params = dict(np.load(path))
+        return cls._params
+
+    def encode(self, des):
+        q = self.params()
+        Z = (des.astype(np.float64) - q["mu"]) @ q["W"]
+        if self.kind == "pca40":
+            z = (Z[:, :40] - q["lo40"]) / (q["hi40"] - q["lo40"]) * 255
+            return np.uint8(np.clip(np.rint(z), 0, 255))
+        if self.kind == "bin128":
+            bits = Z > q["med"]
+        elif self.kind == "bin256":
+            bits = np.concatenate([Z > q["q33"], Z > q["q67"]], 1)
+        else:
+            bits = np.concatenate([Z > q["med"], np.abs(Z - q["med"]) > q["dead"]], 1)
+        return np.packbits(bits, axis=1)
+
+    def features_img(self, img):
+        pts, des = super().features_img(img)
+        return pts, (self.encode(des) if des is not None else None)
+
+    def inliers(self, a, b):
+        if not _kpm_lib() or not hasattr(_kpm, "fpi_keypoint_match_score_full"):
+            raise RuntimeError("q_* matchers need kpm/libkpm.so with fpi_keypoint_match_score_full")
+        if a[1] is None or b[1] is None:
+            return ()
+        a, b = [(np.ascontiguousarray(p, np.float32), np.ascontiguousarray(d, np.uint8)) for p, d in (a, b)]
+        ka, kb = [_Keypoints(len(p), p.ctypes.data, d.ctypes.data) for p, d in (a, b)]
+        out = np.zeros(len(a[0]), np.uint32)
+        n = _kpm.fpi_keypoint_match_score_full(ctypes.byref(ka), ctypes.byref(kb), self.metric,
+                                               self.desc_len, self.ransac_px, 0, out.ctypes.data)
+        return out[:n] if n else ()
+
+    def stored_bytes(self, f):
+        return 0 if f[1] is None else len(f[0]) * (8 + self.desc_len)
 
 
 def _exact_matches(pa, da, pb, db, mutual):
@@ -322,6 +392,10 @@ class Sigfm:
             return 0
         return max(0, self.lib.sigfm_match_score(a, b))
 
+    def stored_bytes(self, f):
+        """The serialized info, as stored in a print"""
+        return len(f) if f else 0
+
 
 MATCHERS = {
     "ours": lambda: Ransac(pre=True),
@@ -329,6 +403,7 @@ MATCHERS = {
     "ours_det": lambda: Ransac(pre=True, det=True),
     "ours_strict": lambda: Ransac(pre=True, det=True, mutual=True, limit_angle=True),
     "union": Union,
+    **{f"q_{k}": (lambda k=k: Quant(k)) for k in Quant.KINDS},
     "vlsift": lambda: CSift("libvlsift.so"),
     "ftsift": lambda: CSift("libftsift.so"),
     **{f"{d}{suffix}": (lambda d=d, pre=pre: Ransac(pre, d))

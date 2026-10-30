@@ -299,6 +299,7 @@ def run_b(idx, stages, jitter, nprobes):
 
     np.savez_compressed(os.path.join(OUT_DIR, f"big_eval_b_{MATCHER_NAME}{RUN_SUFFIX}.npz"), M=M, powner=powner,
                         paligned=paligned, keep=keep, names=names, setname=setname, ident=ident,
+                        tbytes=np.float64([np.mean([MATCH.stored_bytes(x) for x in templates[i]]) for i in keep]),
                         poff=np.float32(poff).reshape(-1, 2),
                         toff=np.float32([toff[i] for i in keep]).reshape(len(keep), stages, 2))
 
