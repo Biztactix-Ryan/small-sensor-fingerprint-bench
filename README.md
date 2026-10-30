@@ -14,24 +14,52 @@ reports false accepts and false rejects per matcher. All matchers see exactly
 the same patches.
 
 - **Part B**: enroll/verify on fingers with several impressions: genuine and
-  impostor attempts. v1: 568 fingers, 1.44 M impostor attempts.
+  impostor attempts. v1: 568 fingers, 1.44 M impostor attempts; v2: 880
+  fingers, 2.58 M; UNSW 2D: 1,452 fingers, 8.35 M.
 - **Part C**: strangers only, from sets with one impression per finger
   (SOCOFing, Family), against the enrolled fingers of part B.
 - **Part A** (optional): public patches against real enrollments of your own
   sensor. Our results are published; our captures are not.
+- **Real sensor** (`bench/cross_finger.py`): genuine and impostor scores on
+  real captures of one person's fingers.
+- **Speed** (`bench/timing.py`): single-threaded extraction, match, verify and
+  identify times per matcher.
 
 ## Matchers
 
+All of them score a probe image against one enrolled image (`union`: against
+all of a finger's enrolled images at once); a verification takes the best
+score over the enrolled images.
+
+**SIGFM (libfprint !530)**: SIFT keypoints on the raw image, ratio-test
+matches, score = number of pairs of match pairs whose length and angle agree.
+
 | Name | What |
 |---|---|
-| `ours_det`, `ours_strict` | `ours` with a deterministic transform search; `strict` adds mutual nearest neighbours and a 45° rotation limit |
-| `union` | ArcticLampyrid's overlap score from !530: union of inliers over all enrolled images, normalized by keypoint count |
-| `orb`, `akaze`, `brisk` (+ `_raw`) | `ours` with binary descriptors instead of SIFT |
-| `sigfm` | SIGFM as in libfprint !530 (commit `bc986621`), built from its sources by `sigfm/build.sh` |
+| `sigfm` | SIGFM as in !530 (commit `bc986621`), built from its sources by `sigfm/build.sh` |
 | `sigfm_fix` | the same with the fix proposed on !530 by Sergey Subbotin: full ordering of matches (the original `operator<` only compares `y`) and keeping the 176 best matches |
 | `sigfm_pre` | unmodified SIGFM on images upscaled 2× and CLAHE-equalized |
-| `ours_raw` | SIFT + RANSAC: matches must agree on one rigid transform (scale 0.85–1.15); score = number of agreeing matches |
-| `ours` | the same with 2× upscale + CLAHE |
+
+**Inlier count (ours)**: 2× bicubic upscale + CLAHE, SIFT keypoints,
+ratio-test matches, then the rotation + translation (scale 0.85–1.15) that the
+most matches agree with; score = number of agreeing matches (inliers).
+
+| Name | What |
+|---|---|
+| `ours` | OpenCV SIFT, OpenCV brute-force matching and RANSAC (randomized) |
+| `ours_raw` | `ours` without the upscale + CLAHE |
+| `ours_det` | `ours` with a deterministic transform search: every two-point transform from the 50 best matches is scored against all matches, the first with most inliers wins. Defined exactly (integer descriptor distances, fixed order of floating point operations), so the C implementation in our libfprint branch gives identical scores |
+| `ours_strict` | `ours_det` where each match must also be the gallery keypoint's nearest neighbour, and rotation is limited to 45° |
+| `union` | ArcticLampyrid's overlap score proposed on !530, on `ours_det` inliers: the union of probe keypoints that are inliers against any enrolled image, ×10000 / max(probe keypoints, mean enrolled keypoints) |
+| `vlsift`, `ftsift` | `ours_det` with SIFT from a C implementation instead of OpenCV's: VLFeat (BSD) or the one in a libfprint fork's FocalTech FT9366 driver (LGPL), built by `csift/build.sh` at pinned commits. For a matcher without OpenCV |
+| `akaze`, `orb`, `brisk` (+ `_raw`) | `ours` with binary keypoints and descriptors (Hamming distance) instead of SIFT |
+
+Our libfprint branch is moving this matcher to plain C without OpenCV: the
+upscale + CLAHE (byte-identical to OpenCV 4.6 and 4.10) and the deterministic
+matching are done; the SIFT choice waits on the `vlsift` / `ftsift` results.
+When the matching code is built as `kpm/libkpm.so` (or `FPBENCH_KPM_LIB`),
+`ours_det`, `ours_strict`, `union` and the C SIFT matchers score through it;
+otherwise through the equivalent Python code.
 
 Scores are only comparable within a matcher, so matchers are compared at
 their own **zero-false-accept threshold**: the lowest threshold without any
@@ -110,15 +138,53 @@ attempts) max 15 for `sigfm`, 29 for `sigfm_fix` (1 FA @ 24); Family
 - UNSW's genuine side is much easier (clean optical impressions): 6–7% FRR.
   There SIGFM is a little better at a fixed false-accept rate (3.8% vs
   5.1%).
-- Pending: `ours` on the stranger sets; v1 runs of `ours_det`,
-  `ours_strict`, `union`, `orb`, `akaze` and the C SIFTs; the enrollment
-  depth sweep (5–25 stages); a UNSW rerun without duplicate impressions
-  (the current UNSW results include subject 6's duplicated impressions,
-  about 40 of 5,875 genuine probes, so FRR may be understated by up to
-  0.7 points).
+- The current UNSW results include subject 6's duplicated impressions
+  (about 40 of 5,875 genuine probes, so FRR may be understated by up to 0.7
+  points); a rerun without them is queued.
 - The v2 logs predate excluding Tsinghua-vs-Tsinghua impostors (see
   [docs/DATASETS.md](docs/DATASETS.md)): their impostor lines include those
   same-finger pairs. The summaries recompute impostors and are what counts.
+
+### v1 matcher variants (preliminary)
+
+Run on the AI box (OpenCV 4.10); its `ours` baseline reproduces the v1
+numbers above (zero-FA threshold 9, FRR 18.6%, 14.5% at FA 1e-5).
+
+| matcher | impostor max | zero-FA threshold (range) | FRR registered there | FRR @ FA 1e-5 |
+|---|---|---|---|---|
+| `ours` | 8 | 9 (8–9) | 18.6% | 14.5% |
+| `union` | 1220 | 1221 (1026–1221) | 40.7% | 33.0% |
+
+The union score more than doubles the false rejects at the same false-accept
+level: normalizing by keypoint count favours impostors with few keypoints.
+(This is the formula as proposed, on our inliers; the proposal used SIGFM's
+matching.) `orb`, `akaze`, `ours_det`, `ours_strict`, `vlsift` and `ftsift`
+are running.
+
+### Speed (preliminary)
+
+Single thread, Intel i7-13700KF, real 96×96 captures, 20 enrolled images;
+measured while the benchmark was running on all cores, so upper bounds. A
+clean run is queued. Milliseconds:
+
+| matcher | extract | verify (extract + 20 matches) | identify over 10 fingers |
+|---|---|---|---|
+| `sigfm` | 6 | 23 | 198 |
+| `sigfm_fix` | 6 | 47 | 263 |
+| `ours` | 12 | 48 | 573 |
+| `ours_det` | 13 | 42 | 433 |
+| `ours_strict` | 15 | 29 | 310 |
+| `akaze` | 7 | 28 | 232 |
+| `vlsift` | 76 | 107 | 553 |
+| `ftsift` | 94 | 137 | 722 |
+| `orb` | 4 | 131 | 1329 |
+| `union` | 10 | 32 | 394 |
+
+Every matcher verifies in well under a second. The C SIFT implementations
+extract keypoints 6–8× slower than OpenCV's (not vectorized), which still
+fits. Matching for the `ours_det` family already went through the C library
+here (`kpm/libkpm.so`); `ours`, `sigfm*` and the binary matchers spend their
+time in OpenCV or SIGFM's C++.
 
 ### Real sensor: Elan 04f3:0c3d, one person
 
@@ -157,6 +223,24 @@ sensor's images rather than a false-accept estimate.
   OpenCV's here.
 
 
+## Next round (running now)
+
+- v1 matcher variants: `orb`, `akaze`, `ours_det`, `ours_strict`, and the C
+  SIFT matchers `vlsift` and `ftsift`. Decides which SIFT (if any) the C
+  matcher uses, and whether the deterministic search and the strict variant
+  cost accuracy.
+- `ours` on the v2 stranger sets (SOCOFing 10.3 M attempts, Family).
+- Enrollment depth: `ours_det` and `sigfm_fix` with 5, 10, 15 and 25
+  enrolled images. More enrolled images help genuine attempts (thumbs on
+  the real sensor) but give impostors more chances; this measures both.
+- UNSW 2D rerun of `sigfm`, `sigfm_fix` and `ours` without the duplicated
+  impressions.
+- Speed on an idle machine, 25 repeats, with 20 and 10 enrolled images.
+
+Then: the C matcher in libfprint with the chosen SIFT, scored through
+libfprint's virtual image driver (as requested on !530), and more real-sensor
+sessions and people.
+
 ## Running it
 
 ```sh
@@ -167,6 +251,9 @@ python3 bench/public_sets.py --data data              # what was found
 python3 bench/big_eval.py --data data --matcher sigfm --out results/mine
 python3 bench/big_eval.py --data data --matcher ours --strangers socofing,family --out results/mine
 python3 bench/summarize.py results/mine
+csift/build.sh                       # optional: the C SIFT matchers vlsift, ftsift
+python3 bench/cross_finger.py --captures MY_CAPTURES --enroll-session SESSION --matcher ours
+python3 bench/timing.py --captures MY_CAPTURES
 ```
 
 Each run of part B takes 15–45 minutes on 22 cores (about 1.5 M matcher
@@ -185,12 +272,16 @@ For another sensor, measure its resolution first
 - `sigfm*` call the !530 C++ code through its C API (via ctypes), including a
   serialize/deserialize round trip like stored prints: 0 score differences
   in 1,260 pairs against a standalone C++ build.
-- `ours` gives the same scores as the C implementation in our libfprint
-  branch.
-- `ours*` are not bit-reproducible: OpenCV's RANSAC is randomized and
-  multithreaded. Two runs of `ours` differed in 1,028 of 1.53 M scores, by a
-  few points each, with the same summary. A rerun of `sigfm` reproduced its
-  summary exactly.
+- `ours` gives the same scores as the C++ (OpenCV) implementation in our
+  first libfprint branch.
+- `ours` and `ours_raw` are not bit-reproducible: OpenCV's RANSAC is
+  randomized and multithreaded. Two runs of `ours` differed in 1,028 of
+  1.53 M scores, by a few points each, with the same summary. A rerun of
+  `sigfm` reproduced its summary exactly.
+- `ours_det` and the matchers built on it are deterministic, and the Python
+  code and our plain C implementation give identical scores: 7,080 real
+  capture pairs, and identical inlier sets on 1,560. The C upscale + CLAHE is
+  byte-identical to OpenCV 4.6 (412 images) and 4.10 (285 images).
 
 ## Disclosure
 
