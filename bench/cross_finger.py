@@ -12,7 +12,7 @@ Layout: DIR/<finger>/<session>-<n>.png, as written by the capture tool.
 Directories starting with "_" are ignored (e.g. quarantined mislabelled
 captures). Only scores are printed; nothing of the images.
 
-Usage: cross_finger.py --captures DIR --enroll-session SESSION --matcher NAME
+Usage: cross_finger.py --captures DIR --enroll-session SESSION --matcher NAME [--threshold T]
 """
 import argparse
 import glob
@@ -40,6 +40,7 @@ def main():
     ap.add_argument("--captures", required=True)
     ap.add_argument("--enroll-session", required=True)
     ap.add_argument("--matcher", required=True, choices=sorted(matchers.MATCHERS))
+    ap.add_argument("--threshold", type=int, help="default: the matcher's")
     a = ap.parse_args()
     MATCH = matchers.get(a.matcher)
 
@@ -65,7 +66,7 @@ def main():
                 continue
             (gen if f == g else imp).append(score(j, f))
     gen, imp = np.array(gen), np.array(imp)
-    t = MATCH.default
+    t = a.threshold or MATCH.default
     print(f"{a.matcher}: {len(fingers)} fingers, enrolled from session {a.enroll_session} "
           f"({sum(map(len, enrolled.values()))} captures)")
     print(f"  impostor attempts {imp.size}, max {imp.max()}, false accepts at {t}: {(imp >= t).sum()}")
