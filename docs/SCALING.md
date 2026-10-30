@@ -55,7 +55,7 @@ For each image (`bench/big_eval.py`):
 ## When the ridge period estimate fails
 
 Measure every new dataset, and check the result: after rescaling, the ridge
-period should match the sensor's. Two datasets here needed manual work:
+period should match the sensor's. Three datasets here needed a closer look:
 
 - **SOCOFing**: the images are 96×103 px for a whole fingertip, about
   162 dpi, not the declared 500. With ridges only ~3 px apart, the default
@@ -68,7 +68,11 @@ period should match the sensor's. Two datasets here needed manual work:
   16–18 ridges, i.e. ~7.5 px period → ~380 dpi. A stranger-only set tolerates
   a ±15% scale error; a genuine-match set would not.
 
-In both cases look at the images: render a few at a known zoom and count
+- **UNSW 2D**: the BMP headers say 500 dpi, but the fingers fill only half
+  of the 480 px image height and the ridge period is 8.53 px (IQR 7.8–9.8)
+  against 9.85 px for the 500 dpi sets → ~433 dpi.
+
+In all cases look at the images: render a few at a known zoom and count
 ridges over a fixed distance. Datasets with a known, consistent resolution
 (FVC, Neurotechnology, MINEX) only need a sanity check.
 

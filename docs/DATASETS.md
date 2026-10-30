@@ -22,7 +22,8 @@ does not state it or states it wrongly.
 | `neuro_uareu` | 65 × 8 | 512 dpi | public download | `https://www.neurotechnology.com/download/UareU_sample_DB.zip` |
 | `fvs` | 21 × 8 | 394 dpi (measured) | public download | `http://fvs.sourceforge.net/fingerprint_bitmaps.zip` |
 | `minex` | 50 subjects × 10 fingers × 2 | 500 dpi | public (NIST) | `https://github.com/usnistgov/minex` (`minexiii/validation`), then `bench/prepare_minex.py DIR` |
-| `tsinghua` | 320 × 2 (normal + distorted) | 449 dpi (measured) | see source | Tsinghua Distorted Fingerprint Database — source: TODO |
+| `tsinghua` | 320 × 2 (normal + distorted) | 449 dpi (measured) | public download, terms not stated | Tsinghua Distorted Fingerprint Database (TDFD), `https://ivg.au.tsinghua.edu.cn/dataset/samples_TDFD/TDFD/Tsinghua%20Distorted%20Fingerprint%20Database.zip` |
+| `unsw2d` | 1500 (150 subjects × 10) × 4 | 433 dpi (measured; the BMP headers say 500) | public download, research use only, cite | J. Hu, W. Zhou, *2D and 3D biometrics fingerprint dataset in contactless and labeled conditions*, Dryad, 2023, `https://doi.org/10.5061/dryad.612jm649q` (`2D_Database.7z` only) |
 
 DB4 of each FVC year is synthetic (SFinGe). FVC2000 DB1 and DB2 share
 volunteers and finger numbering, and the two Neurotechnology sets are the same
@@ -38,6 +39,7 @@ DIR/neuro_uareu/012_3_4.tif
 DIR/fvs/19_1.bmp
 DIR/minex/minexiii/...              (git checkout), DIR/minex/png/a001_02.png (prepare_minex.py)
 DIR/tsinghua/Tsinghua Distorted Fingerprint Database/<finger>/<image>.png
+DIR/unsw2d/2D Database/<subject>_<finger>_<impression>.bmp
 ```
 
 ## Strangers only (part C: one impression per finger)
@@ -45,7 +47,7 @@ DIR/tsinghua/Tsinghua Distorted Fingerprint Database/<finger>/<image>.png
 | Set | Fingers | Resolution | Access | Source |
 |---|---|---|---|---|
 | `socofing` | 6000 (600 subjects × 10), `Real` folder only | 162 dpi (measured; the declared 500 is wrong) | free, Kaggle account | `https://www.kaggle.com/datasets/ruizgara/socofing` |
-| `family` | 1500 (100 families × father/mother/child × 5 fingers), inked scans | ~380 dpi (counted by hand, see SCALING.md) | see source | Family Fingerprint Dataset — source: TODO |
+| `family` | 1500 (100 families × father/mother/child × 5 fingers), inked scans | ~380 dpi (counted by hand, see SCALING.md) | CC BY 4.0 | D. Maiti, D. Das, *Family Fingerprint Dataset*, Mendeley Data, 2023, `https://doi.org/10.17632/m4kz5ygxrn.1` |
 
 Only SOCOFing's `Real` images are used: the `Altered` ones are synthetic
 modifications of the same prints, not other fingers. About 30% of the Family
@@ -55,6 +57,8 @@ patches pass the quality filters (over-inked or faint scans are dropped).
 DIR/SOCOFing/SOCOFing/Real/<subject>__<sex>_<hand>_<finger>_finger.BMP
 DIR/family/FAMILY FINGERPRINT DATASET/FAMILY-<n>/<FATHER|MOTHER|CHILD>/FM<nnn>_<role><k>.png
 ```
+
+Dataset index: [IAPR TC4 fingerprint datasets](https://iapr-tc4.org/fingerprint-datasets/).
 
 ## Not (yet) included
 

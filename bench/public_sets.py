@@ -35,6 +35,9 @@ SETS = {
     # Tsinghua Distorted: normal + deliberately distorted impression per
     # finger; measured from its ridge period (8.84px)
     "tsinghua": (449, False),
+    # UNSW 2D (Dryad doi:10.5061/dryad.612jm649q): 150 subjects x 10 fingers
+    # x 4, optical, 640x480. Headers say 500dpi; ridge period 8.53px => ~433
+    "unsw2d": (433, False),
 }
 
 # one impression per finger, so only usable as strangers (big_eval part C);
@@ -68,6 +71,12 @@ def index():
             for p in glob.glob(os.path.join(d, "*", "*", "*.png")):
                 finger = os.path.basename(os.path.dirname(p))
                 out.append((name, f"{name}/{finger}", os.path.splitext(os.path.basename(p))[0], p))
+            continue
+        if name == "unsw2d":
+            for p in glob.glob(os.path.join(d, "*", "*.*")):
+                m = re.fullmatch(r"(\d+)_(\d+)_(\d+)\.bmp", os.path.basename(p), re.I)
+                if m:
+                    out.append((name, f"{name}/{m[1]}_{m[2]}", m[3], p))
             continue
         if name == "minex":
             for p in glob.glob(os.path.join(d, "png", "*.png")):
