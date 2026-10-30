@@ -196,8 +196,8 @@ class Ransac:
 
 
 class CSift(Ransac):
-    def __init__(self, lib):
-        super().__init__(pre=True, det=True)
+    def __init__(self, lib, strict=False):
+        super().__init__(pre=True, det=True, mutual=strict, limit_angle=strict)
         self.libname = lib
         self._lib = None
 
@@ -457,6 +457,8 @@ MATCHERS = {
     **{f"q_{k}": (lambda k=k: Quant(k)) for k in Quant.KINDS},
     "vlsift": lambda: CSift("libvlsift.so"),
     "ftsift": lambda: CSift("libftsift.so"),
+    "vlsift_strict": lambda: CSift("libvlsift.so", strict=True),
+    "ftsift_strict": lambda: CSift("libftsift.so", strict=True),
     **{f"{d}{suffix}": (lambda d=d, pre=pre: Ransac(pre, d))
        for d in _DETECTORS for suffix, pre in (("", True), ("_raw", False))},
     "sigfm": lambda: Sigfm("libsigfm.so", pre=False),
