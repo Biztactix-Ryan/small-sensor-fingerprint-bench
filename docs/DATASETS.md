@@ -13,7 +13,7 @@ does not state it or states it wrongly.
 
 | | Sets | Fingers | Images |
 |---|---|---|---|
-| Enroll/verify (part B) | 20 | 4,813 | 19,585 |
+| Enroll/verify (part B) | 20 | 4,813 | 23,028 |
 | Strangers only (part C) | 2 | 7,500 | 7,500 |
 
 ## Enroll/verify (part B: genuine and impostor attempts)
@@ -30,7 +30,7 @@ does not state it or states it wrongly.
 | `tsinghua` | 320 × 2 (normal + distorted) | 449 dpi (measured) | public download, terms not stated | Tsinghua Distorted Fingerprint Database (TDFD), `https://ivg.au.tsinghua.edu.cn/dataset/samples_TDFD/TDFD/Tsinghua%20Distorted%20Fingerprint%20Database.zip` |
 | `unsw2d` | 1500 (150 subjects × 10) × 4 | 433 dpi (measured; the BMP headers say 500) | public download, research use only, cite | J. Hu, W. Zhou, *2D and 3D biometrics fingerprint dataset in contactless and labeled conditions*, Dryad, 2023, `https://doi.org/10.5061/dryad.612jm649q` (`2D_Database.7z` only) |
 | `polyu_cross` | 336 × 6; 160 of them also × 6 in a second session 2–24 months later | 512 dpi (sensor; see SCALING.md) | research and non-commercial use only, cite | C. Lin, A. Kumar, *Matching Contactless and Contact-based Conventional Fingerprint Images for Biometrics Identification*, IEEE TIP 27, 2018: The Hong Kong Polytechnic University Contactless 2D to Contact-based 2D Fingerprint Images Database, contact-based part only |
-| `nist302_plain` | 2000 (200 people × 10) × 2–4 plain impressions, each from a different device | 500 dpi | NIST, on request; terms agreed when obtaining it (no redistribution) | NIST Special Database 302, `https://nigos.nist.gov/datasets/sd302/request`: part d (auxiliary plain captures, devices K, L, M, P) and part b's segmented slaps (devices R, S), 500 ppi only |
+| `nist302_plain` | 2000 (200 people × 10) × 2–7 plain impressions, each from a different device (most 5–7) | 500 dpi | NIST, on request; terms agreed when obtaining it (no redistribution) | NIST Special Database 302, `https://nigos.nist.gov/datasets/sd302/request`: part d (auxiliary plain captures, devices K, L, M, P), part b's segmented slaps (devices R, S) and part c's fingers segmented from palm captures (devices J, N, Q; no thumbs), 500 ppi only |
 
 Identities and data fixes (`public_sets.identity()` and `index()`):
 
@@ -63,6 +63,7 @@ DIR/unsw2d/2D Database/<subject>_<finger>_<impression>.bmp
 DIR/polyu_cross/contact-based_fingerprints/{first,second}_session/<finger>_<impression>.jpg
 DIR/nist302_plain/images/auxiliary/flat/<device>/500/plain/png/<subject>_<device>_500_plain_<finger>.png
 DIR/nist302_plain/images/baseline/<device>/500/slap-segmented/png/<subject>_<device>_500_slap_<finger>.png
+DIR/nist302_plain/images/auxiliary/palm/<device>/500/palm-segmented/png/<subject>_<device>_500_palm_<finger>.png
 ```
 
 ## Strangers only (part C: one impression per finger)
@@ -90,6 +91,7 @@ DIR/family/FAMILY FINGERPRINT DATASET/FAMILY-<n>/<FATHER|MOTHER|CHILD>/FM<nnn>_<
 | UNSW 3D / contactless parts (`DS1-3.7z`) | contactless captures, not a contact sensor |
 | PolyU contactless 2D images | contactless camera images |
 | NIST SD 302a, 302b rolled prints (`U`, `V`) and 1000 ppi images | rolled nail to nail, unlike a press; 302a's resolution varies by device |
+| NIST SD 302c whole palms, 1000 ppi images | palms aren't fingertips; the segmented fingers are used |
 | NIST SD 302g (EBTS transactions), 302h (latents) | not plain impressions |
 | FVC2002 DB1 synthetic blend, SFinGe demo (Windows installer) | synthetic; v1 couldn't register any synthetic impression |
 | `latentOverlap` | overlapping latent prints |

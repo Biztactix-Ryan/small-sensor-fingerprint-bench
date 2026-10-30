@@ -45,8 +45,9 @@ SETS = {
     # difference, not resolution, so the sensor's resolution is used.
     "polyu_cross": (512, False),
     # NIST SD 302: plain impressions of 2000 fingers at 500 ppi from up to 3
-    # of 4 auxiliary devices (302d) plus a segmented slap (302b); genuine
-    # attempts are across devices
+    # of 4 auxiliary devices (302d), a segmented slap (302b) and, except
+    # thumbs, fingers segmented from palm captures (302c); genuine attempts
+    # are across devices
     "nist302_plain": (500, False),
 }
 
@@ -107,12 +108,15 @@ def index():
                     out.append((name, f"{name}/{m[1]}_{m[2]}", m[3], p))
             continue
         if name == "nist302_plain":
-            # 302d auxiliary plain captures, and 302b segmented slaps (also
-            # plain presses), all at 500 ppi
+            # 302d auxiliary plain captures, 302b segmented slaps and 302c
+            # fingers segmented from palm captures (no thumbs): all plain
+            # presses at 500 ppi
             paths = glob.glob(os.path.join(d, "images", "auxiliary", "flat", "*", "500", "plain", "png", "*.png"))
             paths += glob.glob(os.path.join(d, "images", "baseline", "*", "500", "slap-segmented", "png", "*.png"))
+            paths += glob.glob(os.path.join(d, "images", "auxiliary", "palm", "*", "500", "palm-segmented", "png",
+                                            "*.png"))
             for p in paths:
-                m = re.fullmatch(r"(\d+)_([A-Z])_500_(?:plain|slap)_(\d+)\.png", os.path.basename(p))
+                m = re.fullmatch(r"(\d+)_([A-Z])_500_(?:plain|slap|palm)_(\d+)\.png", os.path.basename(p))
                 if not m:
                     continue
                 frgp = int(m[3])

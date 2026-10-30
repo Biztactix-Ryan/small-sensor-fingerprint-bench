@@ -36,11 +36,11 @@ sets with 7,500 more are listed in [docs/DATASETS.md](docs/DATASETS.md).
 | Tsinghua Distorted | not stated | 320 recordings | 640 | enroll/verify |
 | UNSW 2D | 150 | 1,500 | 5,975 | enroll/verify |
 | PolyU contact-based, 2 sessions | not stated (336 "clients/fingers") | 336 | 2,976 | enroll/verify |
-| NIST SD 302 plain | 200 | 2,000 | 7,141 | enroll/verify |
-| **enroll/verify total** | | **4,813** | **19,585** | |
+| NIST SD 302 plain (302b, c, d; up to 7 devices per finger) | 200 | 2,000 | 10,584 | enroll/verify |
+| **enroll/verify total** | | **4,813** | **23,028** | |
 | SOCOFing | 600 | 6,000 | 6,000 | strangers only |
 | Family Fingerprint Dataset | 300 (100 families) | 1,500 | 1,500 | strangers only |
-| **public total** | **at least 1,309** | **12,313** | **27,085** | |
+| **public total** | **at least 1,309** | **12,313** | **30,528** | |
 | Elan 04f3:0c3d captures (ours, not published) | 1 | 10 | 301 | real sensor check |
 
 Details, sources and terms: [docs/DATASETS.md](docs/DATASETS.md). Not every
