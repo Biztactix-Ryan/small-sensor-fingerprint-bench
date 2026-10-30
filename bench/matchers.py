@@ -184,8 +184,10 @@ def _exact_matches(pa, da, pb, db, mutual):
     (probe indices, probe points, gallery points) sorted by distance, then
     probe index. Ties between equally near descriptors go to the lower
     index."""
-    A, B = da.astype(np.int64), db.astype(np.int64)
-    D = (A * A).sum(1)[:, None] + (B * B).sum(1)[None, :] - 2 * A @ B.T
+    # float64 is exact here (sums of 128 products of bytes are < 2^24) and
+    # its matrix product is much faster than numpy's integer one
+    A, B = np.float64(da), np.float64(db)
+    D = np.int64((A * A).sum(1)[:, None] + (B * B).sum(1)[None, :] - 2 * (A @ B.T))
     q = np.arange(len(A))
     g = D.argmin(1)
     d1 = D[q, g]

@@ -32,6 +32,9 @@ from collections import defaultdict
 import multiprocessing
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# one BLAS thread per worker process, like OpenCV below
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import public_sets as pub  # noqa: E402
