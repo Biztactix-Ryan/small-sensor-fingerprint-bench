@@ -22,6 +22,8 @@ ours_det: ours with a deterministic estimator instead of OpenCV's RANSAC:
     branch.
 ours_strict: ours_det, plus mutual nearest neighbours only and rotation
     limited to 45 degrees.
+ours_det2: ours_det, then least squares refits of the best transform to its
+    inliers while they gain inliers (what RANSAC's final refinement does).
 union: ArcticLampyrid's overlap score proposed on !530: the union of the
     probe keypoints that are inliers against any enrolled image, x10000 over
     max(probe keypoints, mean keypoints of the enrolled images). Inliers from
@@ -100,13 +102,14 @@ class Ransac:
     thresholds = (6, 8, 10, 12, 14, 16, 20)
     default = 10
 
-    def __init__(self, pre, detector=None, det=False, mutual=False, limit_angle=False):
+    def __init__(self, pre, detector=None, det=False, mutual=False, limit_angle=False, refit=False):
         self.pre = pre
         self.ransac_px = 3.0 * (2 if pre else 1)
         self.detector = detector
         self.det = det
         self.mutual = mutual
         self.limit_angle = limit_angle
+        self.refit = refit
         self._det = None
 
     def features_img(self, img):
@@ -158,7 +161,7 @@ class Ransac:
             return ()
         qi, src, dst = m
         if self.det:
-            mask = _similarity_inliers(src, dst, self.ransac_px, self.limit_angle)
+            mask = _similarity_inliers(src, dst, self.ransac_px, self.limit_angle, refit=self.refit)
             return qi[mask] if mask is not None else ()
         M, inl = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
                                              ransacReprojThreshold=self.ransac_px)
@@ -176,7 +179,7 @@ class Ransac:
         a, b = [(np.ascontiguousarray(p, np.float32), np.ascontiguousarray(d, np.uint8)) for p, d in (a, b)]
         ka, kb = [_Keypoints(len(p), p.ctypes.data, d.ctypes.data) for p, d in (a, b)]
         out = np.zeros(len(a[0]), np.uint32)
-        flags = (1 if self.mutual else 0) | (2 if self.limit_angle else 0)
+        flags = (1 if self.mutual else 0) | (2 if self.limit_angle else 0) | (4 if self.refit else 0)
         n = _kpm.fpi_keypoint_match_score(ctypes.byref(ka), ctypes.byref(kb), self.ransac_px, flags,
                                           out.ctypes.data)
         return out[:n] if n else ()
@@ -311,7 +314,7 @@ def _exact_matches(pa, da, pb, db, mutual):
     return np.int32(q), pa[q], pb[g]
 
 
-def _similarity_inliers(src, dst, px, limit_angle, n_best=50):
+def _similarity_inliers(src, dst, px, limit_angle, n_best=50, refit=False):
     """Inlier mask of the transform (rotation, translation, scale 0.85-1.15,
     optionally rotation within 45 degrees) with most inliers, among those
     through every pair of the n_best first matches; the first maximum wins.
@@ -339,7 +342,54 @@ def _similarity_inliers(src, dst, px, limit_angle, n_best=50):
     ex = ar[:, None] * sx[None, :] - ai[:, None] * sy[None, :] + tx[:, None] - dx[None, :]
     ey = ai[:, None] * sx[None, :] + ar[:, None] * sy[None, :] + ty[:, None] - dy[None, :]
     within = ex * ex + ey * ey < px * px
-    return within[int(np.argmax(within.sum(1)))]
+    mask = within[int(np.argmax(within.sum(1)))]
+    if refit:
+        mask = _refit(sx, sy, dx, dy, mask, px, limit_angle)
+    return mask
+
+
+def _refit(sx, sy, dx, dy, mask, px, limit_angle, rounds=3):
+    """Least squares fits of the transform to its inliers while they gain
+    inliers; sums in match order, as fpi_keypoint_match_score() does."""
+    best = int(mask.sum())
+    for _ in range(rounds):
+        if best < 3:
+            break
+        idx = [int(m) for m in np.nonzero(mask)[0]]
+        msx = msy = mdx = mdy = 0.0
+        for m in idx:
+            msx += float(sx[m])
+            msy += float(sy[m])
+            mdx += float(dx[m])
+            mdy += float(dy[m])
+        msx /= best
+        msy /= best
+        mdx /= best
+        mdy /= best
+        nr = ni = den = 0.0
+        for m in idx:
+            csx, csy = float(sx[m]) - msx, float(sy[m]) - msy
+            cdx, cdy = float(dx[m]) - mdx, float(dy[m]) - mdy
+            nr += cdx * csx + cdy * csy
+            ni += cdy * csx - cdx * csy
+            den += csx * csx + csy * csy
+        if den <= 1e-12:
+            break
+        ar, ai = nr / den, ni / den
+        s2 = ar * ar + ai * ai
+        if s2 <= 0.85 * 0.85 or s2 >= 1.15 * 1.15:
+            break
+        if limit_angle and not (ar > 0 and ai * ai <= ar * ar):
+            break
+        tx = mdx - (ar * msx - ai * msy)
+        ty = mdy - (ai * msx + ar * msy)
+        ex = ar * sx - ai * sy + tx - dx
+        ey = ai * sx + ar * sy + ty - dy
+        new = ex * ex + ey * ey < px * px
+        if int(new.sum()) <= best:
+            break
+        mask, best = new, int(new.sum())
+    return mask
 
 
 class Sigfm:
@@ -402,6 +452,7 @@ MATCHERS = {
     "ours_raw": lambda: Ransac(pre=False),
     "ours_det": lambda: Ransac(pre=True, det=True),
     "ours_strict": lambda: Ransac(pre=True, det=True, mutual=True, limit_angle=True),
+    "ours_det2": lambda: Ransac(pre=True, det=True, refit=True),
     "union": Union,
     **{f"q_{k}": (lambda k=k: Quant(k)) for k in Quant.KINDS},
     "vlsift": lambda: CSift("libvlsift.so"),
