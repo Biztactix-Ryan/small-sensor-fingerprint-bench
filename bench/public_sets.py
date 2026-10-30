@@ -39,6 +39,11 @@ SETS = {
     # UNSW 2D (Dryad doi:10.5061/dryad.612jm649q): 150 subjects x 10 fingers
     # x 4, optical, 640x480. Headers say 500dpi; ridge period 8.53px => ~433
     "unsw2d": (433, False),
+    # PolyU contactless-to-contact database, contact part only: U.are.U 4000
+    # at its native 512 dpi (same sensor and image size as neuro_uareu). Its
+    # ridge period is ~12% finer than neuro_uareu's: a population
+    # difference, not resolution, so the sensor's resolution is used.
+    "polyu_cross": (512, False),
 }
 
 # one impression per finger, so only usable as strangers (big_eval part C);
@@ -86,6 +91,16 @@ def index():
                 if key not in seen:
                     seen.add(key)
                     out.append((name, f"{name}/{m[1]}_{m[2]}", m[3], p))
+            continue
+        if name == "polyu_cross":
+            # sessions 2-24 months apart; impressions keyed so that session 1
+            # sorts first: fingers with both are enrolled from session 1 and
+            # verified with session 2
+            for p in glob.glob(os.path.join(d, "contact-based_fingerprints", "*_session", "*.jpg")):
+                m = re.fullmatch(r"(\d+)_(\d+)\.jpg", os.path.basename(p))
+                sess = 1 if "first_session" in p else 2
+                if m:
+                    out.append((name, f"{name}/{m[1]}", f"{sess}_{int(m[2])}", p))
             continue
         if name == "minex":
             for p in glob.glob(os.path.join(d, "png", "*.png")):

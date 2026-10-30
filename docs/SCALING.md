@@ -72,6 +72,12 @@ period should match the sensor's. Three datasets here needed a closer look:
   of the 480 px image height and the ridge period is 8.53 px (IQR 7.8–9.8)
   against 9.85 px for the 500 dpi sets → ~433 dpi.
 
+- **PolyU (contact part)**: the ridge period says ~616 dpi, but the images
+  come from a U.are.U 4000 at its native 512 dpi, the same sensor and image
+  size as `neuro_uareu`, whose ridges are ~12% coarser (9.14 vs 8.00 px).
+  Ridge spacing differs between populations by about that much, so when the
+  sensor is known, its resolution wins over the ridge period.
+
 In all cases look at the images: render a few at a known zoom and count
 ridges over a fixed distance. Datasets with a known, consistent resolution
 (FVC, Neurotechnology, MINEX) only need a sanity check.

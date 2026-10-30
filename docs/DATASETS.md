@@ -23,6 +23,7 @@ does not state it or states it wrongly.
 | `fvs` | 21 × 8 | 394 dpi (measured) | public download | `http://fvs.sourceforge.net/fingerprint_bitmaps.zip` |
 | `minex` | 50 subjects × 10 fingers × 2 | 500 dpi | public (NIST) | `https://github.com/usnistgov/minex` (`minexiii/validation`), then `bench/prepare_minex.py DIR` |
 | `tsinghua` | 320 × 2 (normal + distorted) | 449 dpi (measured) | public download, terms not stated | Tsinghua Distorted Fingerprint Database (TDFD), `https://ivg.au.tsinghua.edu.cn/dataset/samples_TDFD/TDFD/Tsinghua%20Distorted%20Fingerprint%20Database.zip` |
+| `polyu_cross` | 336 × 6, of which 160 also × 6 in a second session 2–24 months later | 512 dpi (sensor; see SCALING.md) | research and non-commercial use only, cite | C. Lin, A. Kumar, *Matching Contactless and Contact-based Conventional Fingerprint Images for Biometrics Identification*, IEEE TIP 27, 2018; The Hong Kong Polytechnic University Contactless 2D to Contact-based 2D Fingerprint Images Database (contact-based part only) |
 | `unsw2d` | 1500 (150 subjects × 10) × 4 | 433 dpi (measured; the BMP headers say 500) | public download, research use only, cite | J. Hu, W. Zhou, *2D and 3D biometrics fingerprint dataset in contactless and labeled conditions*, Dryad, 2023, `https://doi.org/10.5061/dryad.612jm649q` (`2D_Database.7z` only) |
 
 DB4 of each FVC year is synthetic (SFinGe). FVC2000 DB1 and DB2 share
@@ -44,6 +45,7 @@ DIR/fvs/19_1.bmp
 DIR/minex/minexiii/...              (git checkout), DIR/minex/png/a001_02.png (prepare_minex.py)
 DIR/tsinghua/Tsinghua Distorted Fingerprint Database/<finger>/<image>.png
 DIR/unsw2d/2D Database/<subject>_<finger>_<impression>.bmp
+DIR/polyu_cross/contact-based_fingerprints/{first,second}_session/<finger>_<impression>.jpg
 ```
 
 ## Strangers only (part C: one impression per finger)
