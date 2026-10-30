@@ -1,0 +1,45 @@
+matcher: q_pca40
+2853 public images, 657 fingers, sensor 542 dpi
+   impressions registered to the enrollment impression: 1343/2196
+
+=== B. simulated enroll/verify: 568 public fingers, 10 stages, jitter 20px, 2695 probes (features 33s)
+   1530760 probe x template comparisons in 521s
+   genuine attempts 2541 (1411 registered), impostor attempts 1440034
+   threshold  false-reject% (registered / all)  false-accepts
+           6      11.7 /  47.1             587/1440034
+           8      15.4 /  50.7             11/1440034
+          10      19.8 /  53.8             0/1440034
+          12      24.0 /  56.5             0/1440034
+          14      27.5 /  58.8             0/1440034
+          16      31.7 /  61.1             0/1440034
+          20      37.7 /  64.9             0/1440034
+   same finger number in sister datasets (excluded from impostors): 713 attempts, 95 score >= 10, max 21
+   impostor score histogram: {0: 19511, 2: 544890, 3: 758598, 4: 109421, 5: 7027, 6: 528, 7: 48, 8: 9, 9: 2}
+   genuine false-reject% by set at threshold 10:
+      fvc2000_DB1_B      registered  86.4% (n=22)  all  84.4% (n=77)
+      fvc2000_DB2_B      registered  37.5% (n=40)  all  54.5% (n=55)
+      fvc2000_DB3_B      registered  69.8% (n=43)  all  81.0% (n=79)
+      fvc2000_DB4_B      registered    n/a (n=0)  all  98.7% (n=78)  synthetic
+      fvc2002_DB1_B      registered  31.2% (n=32)  all  67.5% (n=80)
+      fvc2002_DB2_B      registered  21.7% (n=60)  all  36.2% (n=80)
+      fvc2002_DB3_B      registered  66.7% (n=6)  all  97.4% (n=77)
+      fvc2002_DB4_B      registered    n/a (n=0)  all 100.0% (n=78)  synthetic
+      fvc2004_DB1_B      registered  71.4% (n=14)  all  91.7% (n=72)
+      fvc2004_DB2_B      registered  80.3% (n=61)  all  84.8% (n=79)
+      fvc2004_DB3_B      registered  44.1% (n=68)  all  51.3% (n=78)
+      fvc2004_DB4_B      registered  37.5% (n=8)  all  93.1% (n=72)  synthetic
+      fvs                registered   0.0% (n=166)  all   1.2% (n=168)
+      minex              registered  76.9% (n=39)  all  98.4% (n=575)
+      neuro_crossmatch   registered   8.7% (n=378)  all  11.4% (n=394)
+      neuro_uareu        registered   7.0% (n=474)  all   8.6% (n=499)
+   highest impostor scores:
+      (9, 'neuro_uareu', 'neuro_uareu/013_9', 'neuro_uareu/013_2')
+      (9, 'neuro_crossmatch', 'neuro_crossmatch/017_6', 'neuro_crossmatch/017_5')
+      (8, 'neuro_uareu', 'neuro_uareu/022_6', 'fvc2002_DB2_B/106')
+      (8, 'neuro_uareu', 'neuro_uareu/022_10', 'neuro_crossmatch/017_7')
+      (8, 'neuro_uareu', 'neuro_uareu/022_1', 'minex/005_02')
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/047_3', 'neuro_uareu/022_7')
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/045_4', 'neuro_crossmatch/022_8')
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/027_7', 'neuro_uareu/012_5')
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/027_6', 'neuro_crossmatch/047_3')
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/012_7', 'minex/041_05')

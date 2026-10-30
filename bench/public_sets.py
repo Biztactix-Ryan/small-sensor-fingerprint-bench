@@ -44,10 +44,17 @@ SETS = {
     # ridge period is ~12% finer than neuro_uareu's: a population
     # difference, not resolution, so the sensor's resolution is used.
     "polyu_cross": (512, False),
-    # NIST SD 302d: plain impressions of ~2000 fingers on up to 3 of 4
-    # devices (K, L, M, P) at 500 ppi; genuine attempts are across devices
+    # NIST SD 302: plain impressions of 2000 fingers at 500 ppi from up to 3
+    # of 4 auxiliary devices (302d) plus a segmented slap (302b); genuine
+    # attempts are across devices
     "nist302_plain": (500, False),
 }
+
+# The 500 dpi reference for measuring a sensor's resolution (main()). Fixed,
+# because ridge spacing differs between populations: adding sets would
+# shift the reference.
+CALIBRATION_SETS = {"fvc2000_DB1_B", "fvc2000_DB2_B", "fvc2000_DB3_B", "fvc2002_DB1_B",
+                    "fvc2002_DB3_B", "fvc2004_DB1_B", "neuro_crossmatch", "minex"}
 
 # one impression per finger, so only usable as strangers (big_eval part C);
 # measured from its ridge period (3.2px), the declared 500dpi is wrong
@@ -55,6 +62,10 @@ SETS = {
 # families. Its blotchy ink defeats ridge_period(); ~7.5px ridges counted by
 # hand in native crops. Faint scans are dropped by the patch filters.
 STRANGER_SETS = {"socofing": (162, False), "family": (380, False)}
+
+
+# SD 302 errata (ERRATA_SD302.txt, 2023-2024): thumbs (01, 06) swapped
+NIST302_THUMBS_SWAPPED = {("00002302", "L"), ("00002534", "S"), ("00002561", "S"), ("00002420", "R")}
 
 
 def strangers(name):
@@ -96,13 +107,17 @@ def index():
                     out.append((name, f"{name}/{m[1]}_{m[2]}", m[3], p))
             continue
         if name == "nist302_plain":
-            for p in glob.glob(os.path.join(d, "images", "auxiliary", "flat", "*", "500", "plain", "png", "*.png")):
-                m = re.fullmatch(r"(\d+)_([A-Z])_500_plain_(\d+)\.png", os.path.basename(p))
+            # 302d auxiliary plain captures, and 302b segmented slaps (also
+            # plain presses), all at 500 ppi
+            paths = glob.glob(os.path.join(d, "images", "auxiliary", "flat", "*", "500", "plain", "png", "*.png"))
+            paths += glob.glob(os.path.join(d, "images", "baseline", "*", "500", "slap-segmented", "png", "*.png"))
+            for p in paths:
+                m = re.fullmatch(r"(\d+)_([A-Z])_500_(?:plain|slap)_(\d+)\.png", os.path.basename(p))
                 if not m:
                     continue
                 frgp = int(m[3])
-                # errata (13 July 2023): 00002302 device L has the thumbs swapped
-                if m[1] == "00002302" and m[2] == "L" and frgp in (1, 6):
+                # errata: thumbs swapped for these subjects on these devices
+                if (m[1], m[2]) in NIST302_THUMBS_SWAPPED and frgp in (1, 6):
                     frgp = 7 - frgp
                 out.append((name, f"{name}/{m[1]}_{frgp:02d}", m[2], p))
             continue
@@ -235,7 +250,7 @@ def main():
     print(f"total {total} fingers")
 
     ref = [ridge_period(cv2.imread(p, cv2.IMREAD_GRAYSCALE))
-           for s, f, i, p in idx if SETS[s][0] == 500 and not SETS[s][1]][::4]
+           for s, f, i, p in idx if s in CALIBRATION_SETS][::4]
     pr = float(np.median(ref))
     print(f"ridge period of the 500dpi sets: {pr:.2f}px (n={len(ref)})")
     if a.captures:

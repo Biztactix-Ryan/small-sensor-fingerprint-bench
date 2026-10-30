@@ -1,0 +1,30 @@
+matcher: akaze
+5975 public images, 1500 fingers, sensor 542 dpi
+   impressions registered to the enrollment impression: 4369/4475
+
+=== B. simulated enroll/verify: 1452 public fingers, 10 stages, jitter 20px, 5855 probes (features 121s)
+   8501460 probe x template comparisons in 4081s
+   genuine attempts 5735 (5567 registered), impostor attempts 8321477
+   threshold  false-reject% (registered / all)  false-accepts
+           6       2.7 /   4.3             494/8321477
+           8       3.8 /   5.5             13/8321477
+          10       4.8 /   6.6             1/8321477
+          12       6.2 /   8.1             1/8321477
+          14       7.6 /   9.6             0/8321477
+          16       9.2 /  11.2             0/8321477
+          20      11.8 /  13.9             0/8321477
+   same finger number in sister datasets (excluded from impostors): 8 attempts, 4 score >= 10, max 134
+   impostor score histogram: {0: 3837717, 2: 3709361, 3: 727223, 4: 43101, 5: 3581, 6: 406, 7: 75, 8: 10, 9: 2, 12: 1}
+   genuine false-reject% by set at threshold 10:
+      unsw2d             registered   4.8% (n=5567)  all   6.6% (n=5735)
+   highest impostor scores:
+      (12, 'unsw2d', 'unsw2d/22_8', 'unsw2d/9_3')
+      (9, 'unsw2d', 'unsw2d/149_8', 'unsw2d/90_4')
+      (9, 'unsw2d', 'unsw2d/149_8', 'unsw2d/90_4')
+      (8, 'unsw2d', 'unsw2d/99_9', 'unsw2d/149_1')
+      (8, 'unsw2d', 'unsw2d/8_3', 'unsw2d/87_9')
+      (8, 'unsw2d', 'unsw2d/76_4', 'unsw2d/15_8')
+      (8, 'unsw2d', 'unsw2d/67_7', 'unsw2d/132_10')
+      (8, 'unsw2d', 'unsw2d/40_1', 'unsw2d/36_10')
+      (8, 'unsw2d', 'unsw2d/36_7', 'unsw2d/136_6')
+      (8, 'unsw2d', 'unsw2d/23_10', 'unsw2d/106_7')

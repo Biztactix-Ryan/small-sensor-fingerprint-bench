@@ -1,0 +1,59 @@
+matcher: ours
+3493 public images, 977 fingers, sensor 542 dpi
+   impressions registered to the enrollment impression: 1593/2516
+
+=== B. simulated enroll/verify: 880 public fingers, 10 stages, jitter 20px, 3310 probes (features 70s)
+   2912800 probe x template comparisons in 4962s
+   genuine attempts 3146 (1878 registered), impostor attempts 2576466
+   threshold  false-reject% (registered / all)  false-accepts
+           6      16.1 /  46.9             197/2576466
+           8      21.4 /  51.1             3/2576466
+          10      26.8 /  54.8             0/2576466
+          12      31.7 /  58.0             0/2576466
+          14      35.6 /  60.7             0/2576466
+          16      40.0 /  63.4             0/2576466
+          20      46.4 /  67.5             0/2576466
+   same finger number in sister datasets (excluded from impostors): 188868 attempts, 392 score >= 10, max 68
+   impostor score histogram: {0: 1089260, 2: 1059184, 3: 384655, 4: 40818, 5: 2352, 6: 175, 7: 19, 8: 3}
+   genuine false-reject% by set at threshold 10:
+      fvc2000_DB1_B      registered  95.5% (n=22)  all  87.0% (n=77)
+      fvc2000_DB2_B      registered  35.0% (n=40)  all  52.7% (n=55)
+      fvc2000_DB3_B      registered  79.1% (n=43)  all  86.1% (n=79)
+      fvc2000_DB4_B      registered    n/a (n=0)  all  98.7% (n=78)  synthetic
+      fvc2002_DB1_B      registered  34.4% (n=32)  all  67.5% (n=80)
+      fvc2002_DB2_B      registered  25.0% (n=60)  all  37.5% (n=80)
+      fvc2002_DB3_B      registered  66.7% (n=6)  all  96.1% (n=77)
+      fvc2002_DB4_B      registered    n/a (n=0)  all 100.0% (n=78)  synthetic
+      fvc2004_DB1_B      registered  71.4% (n=14)  all  90.3% (n=72)
+      fvc2004_DB2_B      registered  77.0% (n=61)  all  82.3% (n=79)
+      fvc2004_DB3_B      registered  45.6% (n=68)  all  52.6% (n=78)
+      fvc2004_DB4_B      registered  37.5% (n=8)  all  93.1% (n=72)  synthetic
+      fvs                registered   0.0% (n=166)  all   1.2% (n=168)
+      minex              registered  84.6% (n=39)  all  99.0% (n=575)
+      neuro_crossmatch   registered   8.5% (n=378)  all  11.4% (n=394)
+      neuro_uareu        registered   7.4% (n=474)  all   9.4% (n=499)
+      tsinghua           registered  45.6% (n=467)  all  57.2% (n=605)
+   highest impostor scores:
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/076_3', 'tsinghua/20')
+      (8, 'neuro_crossmatch', 'neuro_crossmatch/017_6', 'neuro_crossmatch/017_5')
+      (8, 'fvs', 'fvs/16', 'tsinghua/32')
+
+=== C. 6000 socofing strangers (162 dpi, 11743 probe patches) vs the 880 templates of B: 10333840 attempts in 28153s
+score histogram: {0: 5583527, 2: 3675414, 3: 981233, 4: 87843, 5: 5315, 6: 466, 7: 34, 8: 6, 9: 2}
+   threshold    6: false accepts 508/10333840
+   threshold    8: false accepts 8/10333840
+   threshold   10: false accepts 0/10333840
+   threshold   12: false accepts 0/10333840
+   threshold   14: false accepts 0/10333840
+   threshold   16: false accepts 0/10333840
+   threshold   20: false accepts 0/10333840
+
+=== C. 1500 family strangers (380 dpi, 745 probe patches) vs the 880 templates of B: 655600 attempts in 1029s
+score histogram: {0: 341541, 2: 270774, 3: 41487, 4: 1744, 5: 50, 6: 4}
+   threshold    6: false accepts 4/655600
+   threshold    8: false accepts 0/655600
+   threshold   10: false accepts 0/655600
+   threshold   12: false accepts 0/655600
+   threshold   14: false accepts 0/655600
+   threshold   16: false accepts 0/655600
+   threshold   20: false accepts 0/655600

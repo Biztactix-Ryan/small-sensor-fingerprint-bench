@@ -1,0 +1,31 @@
+matcher: sigfm
+5975 public images, 1500 fingers, sensor 542 dpi
+   impressions registered to the enrollment impression: 4369/4475
+
+=== B. simulated enroll/verify: 1452 public fingers, 10 stages, jitter 20px, 5855 probes (features 122s)
+   8501460 probe x template comparisons in 3624s
+   genuine attempts 5735 (5567 registered), impostor attempts 8321477
+   threshold  false-reject% (registered / all)  false-accepts
+          10       3.1 /   4.9             1503/8321477
+          15       3.3 /   5.1             395/8321477
+          24       3.9 /   5.9             72/8321477
+          45       4.7 /   6.7             9/8321477
+         100       6.2 /   8.3             1/8321477
+         200       8.1 /  10.2             0/8321477
+         500      10.4 /  12.6             0/8321477
+        1000      13.1 /  15.2             0/8321477
+   same finger number in sister datasets (excluded from impostors): 8 attempts, 4 score >= 24, max 469735
+   impostor score histogram: {0: 8225104, 1: 55925, 2: 16886, 3: 11581, 4: 4515, 5: 1969, 6: 2074, 7: 950, 8: 553, 9: 417, 10: 577, 11: 216, 12: 127, 13: 112, 14: 76, 15: 98, 16: 55, 17: 47, 18: 30, 19: 27, 20: 19, 21: 26, 22: 12, 23: 9, 24: 14, 25: 6, 26: 3, 27: 4, 28: 4, 29: 2, 30: 2, 31: 4, 32: 3, 33: 5, 34: 1, 35: 3, 36: 1, 38: 1, 39: 1, 40: 1, 41: 2, 42: 1, 43: 4, 44: 1, 45: 1, 48: 1, 50: 1, 52: 1, 53: 1, 57: 1, 62: 1, 74: 1, 100: 1}
+   genuine false-reject% by set at threshold 24:
+      unsw2d             registered   3.9% (n=5567)  all   5.9% (n=5735)
+   highest impostor scores:
+      (100, 'unsw2d', 'unsw2d/87_2', 'unsw2d/58_2')
+      (74, 'unsw2d', 'unsw2d/127_3', 'unsw2d/136_2')
+      (62, 'unsw2d', 'unsw2d/107_3', 'unsw2d/105_3')
+      (57, 'unsw2d', 'unsw2d/50_6', 'unsw2d/88_7')
+      (53, 'unsw2d', 'unsw2d/105_8', 'unsw2d/58_2')
+      (52, 'unsw2d', 'unsw2d/138_8', 'unsw2d/136_1')
+      (50, 'unsw2d', 'unsw2d/116_7', 'unsw2d/77_6')
+      (48, 'unsw2d', 'unsw2d/105_4', 'unsw2d/65_7')
+      (45, 'unsw2d', 'unsw2d/66_2', 'unsw2d/86_2')
+      (44, 'unsw2d', 'unsw2d/128_5', 'unsw2d/113_5')

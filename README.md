@@ -11,235 +11,264 @@ into sensor-sized patches ([docs/SCALING.md](docs/SCALING.md)). On those, the
 benchmark simulates enrollment (10 stages, a finger placed slightly
 differently each time) and verification against every enrolled finger, and
 reports false accepts and false rejects per matcher. All matchers see exactly
-the same patches.
+the same patches. 20 enroll/verify sets with 4,813 fingers and 2 stranger-only
+sets with 7,500 more are listed in [docs/DATASETS.md](docs/DATASETS.md).
 
 - **Part B**: enroll/verify on fingers with several impressions: genuine and
-  impostor attempts. v1: 568 fingers, 1.44 M impostor attempts; v2: 880
-  fingers, 2.58 M; UNSW 2D: 1,452 fingers, 8.35 M.
-- **Part C**: strangers only, from sets with one impression per finger
-  (SOCOFing, Family), against the enrolled fingers of part B.
-- **Part A** (optional): public patches against real enrollments of your own
-  sensor. Our results are published; our captures are not.
+  impostor attempts. Runs: v1 (16 sets, 568 fingers, 1.44 M impostor
+  attempts), v2 (v1 + Tsinghua, 880 fingers, 2.58 M), UNSW 2D (1,452
+  fingers, 8.32 M).
+- **Part C**: strangers only (SOCOFing, Family) against the enrolled fingers
+  of part B.
 - **Real sensor** (`bench/cross_finger.py`): genuine and impostor scores on
-  real captures of one person's fingers.
+  real captures of one person's fingers. Only scores are published.
 - **Speed** (`bench/timing.py`): single-threaded extraction, match, verify and
-  identify times per matcher.
+  identify times.
+
+### Data at a glance
+
+| data | people | fingers | prints | used for |
+|---|---|---|---|---|
+| FVC2000/2002/2004 B sets (12 sets, 3 synthetic) | not stated | 120 | 960 | enroll/verify |
+| Neurotechnology CrossMatch + U.are.U samples | 9 | 116 (same fingers on 2 sensors) | 928 | enroll/verify |
+| FVS | not stated | 21 | 168 | enroll/verify |
+| NIST MINEX III validation | 50 | 400 | 797 | enroll/verify |
+| Tsinghua Distorted | not stated | 320 recordings | 640 | enroll/verify |
+| UNSW 2D | 150 | 1,500 | 5,975 | enroll/verify |
+| PolyU contact-based, 2 sessions | not stated (336 "clients/fingers") | 336 | 2,976 | enroll/verify |
+| NIST SD 302 plain | 200 | 2,000 | 7,141 | enroll/verify |
+| **enroll/verify total** | | **4,813** | **19,585** | |
+| SOCOFing | 600 | 6,000 | 6,000 | strangers only |
+| Family Fingerprint Dataset | 300 (100 families) | 1,500 | 1,500 | strangers only |
+| **public total** | **at least 1,309** | **12,313** | **27,085** | |
+| Elan 04f3:0c3d captures (ours, not published) | 1 | 10 | 301 | real sensor check |
+
+Details, sources and terms: [docs/DATASETS.md](docs/DATASETS.md). Not every
+set has been run yet: v1 used the FVC, Neurotechnology, FVS and MINEX sets
+(16 sets, 568 fingers after
+quality filters), v2 added Tsinghua, UNSW 2D ran on its own, and PolyU and
+NIST SD 302 have had subset smoke tests so far.
+
+Matchers are compared at their own **zero-false-accept threshold** (the lowest
+threshold without a false accept in the run; range = bootstrap over fingers,
+5th–95th percentile) and by the false-reject rate (FRR) of genuine attempts
+whose probe could be registered to the enrollment, also at a fixed
+false-accept rate of 1e-5. Scores are only comparable within a matcher.
+
+## Findings
+
+| | v1 threshold | v1 FRR @ FA 1e-5 | v2 threshold | v2 FRR @ FA 1e-5 | UNSW threshold | UNSW FRR @ FA 1e-5 | bytes per enrolled image |
+|---|---|---|---|---|---|---|---|
+| `sigfm` (!530) | 28 (19–28) | 15.1% | 29 (24–29) | 21.9% | 101 (53–101) | 3.9% | 141,554 |
+| `sigfm_fix` | 63 (28–63) | 15.5% | 63 (32–63) | 21.8% | 134 (84–134) | 3.9% | 141,554 |
+| `ours` (SIFT + RANSAC) | 9 (8–9) | 14.4% | 9 (8–9) | 18.8% | 10 (9–10) | 5.1% | — |
+| `ftsift_strict` (all C) | 8 (7–8) | 13.3% | | | | | 67,121 |
+| `akaze` | 9 (7–9) | **11.2%** | 9 (8–9) | **18.1%** | 13 (9–13) | **3.8%** | 19,848 |
+
+1. **SIGFM's threshold isn't a constant.** The shipped 24 accepts strangers
+   on every set (1 in v1, 5 in v2, 72 in UNSW); the safe value depends on the
+   sensor's images (~28 contact, ~100 optical) and on the number of enrolled
+   images (13 to 26 at FA 1e-5 for 5 to 25 images). With the ordering fix it
+   is set by single impostor pairs and moves between 28 and 63.
+2. **An inlier count (matches agreeing on one rigid transform) has a stable
+   threshold:** 8–10 on every set and for 5–25 enrolled images. In 21 M
+   stranger attempts over all runs it never reached 10.
+3. **Accuracy is close between SIGFM and SIFT inlier counts;** AKAZE
+   descriptors are better on all three public runs, most of all averaged per
+   set (30% vs 40% FRR on v1, 31% vs 41% on v2) and on hard data
+   (cross-session and cross-device subsets below).
+4. **But on the real Elan 0c3d, AKAZE rejects more presses** (23 of 201,
+   against 14 for SIGFM and `ftsift_strict`) at the same threshold: its
+   scores, genuine and impostor, run lower on this sensor's images. Whether a
+   per-sensor threshold or tuning fixes that is open.
+5. **SIFT without OpenCV works:** the FocalTech FT9366 C SIFT (LGPL) with
+   strict matching (mutual matches, ±45°) and our C matcher beats the OpenCV
+   pipeline on v1.
+6. **Compact descriptors:** ternary codes (32 bytes per keypoint, 3.4×
+   smaller than SIFT's) match AKAZE's accuracy on v1 with their own threshold
+   of 13.
 
 ## Matchers
 
-All of them score a probe image against one enrolled image (`union`: against
-all of a finger's enrolled images at once); a verification takes the best
-score over the enrolled images.
-
-**SIGFM (libfprint !530)**: SIFT keypoints on the raw image, ratio-test
-matches, score = number of pairs of match pairs whose length and angle agree.
+**Going forward**, three matchers:
 
 | Name | What |
 |---|---|
-| `sigfm` | SIGFM as in !530 (commit `bc986621`), built from its sources by `sigfm/build.sh` |
-| `sigfm_fix` | the same with the fix proposed on !530 by Sergey Subbotin: full ordering of matches (the original `operator<` only compares `y`) and keeping the 176 best matches |
-| `sigfm_pre` | unmodified SIGFM on images upscaled 2× and CLAHE-equalized |
+| `sigfm` | SIGFM as in !530 (commit `bc986621`), built from its sources by `sigfm/build.sh`: SIFT keypoints on the raw image, ratio-test matches, score = number of pairs of match pairs whose length and angle agree. The reference |
+| `ftsift_strict` | the inlier count, all in C: 2× upscale + CLAHE, SIFT from a libfprint fork's FocalTech FT9366 driver (LGPL, `csift/build.sh`), ratio-test matches that are each other's nearest neighbours, deterministic search for the rotation (±45°) + translation the most matches agree with; score = agreeing matches |
+| `akaze` | the inlier count on OpenCV AKAZE keypoints and binary descriptors (Hamming distance), with OpenCV RANSAC. The candidate for a C port |
 
-**Inlier count (ours)**: 2× bicubic upscale + CLAHE, SIFT keypoints,
-ratio-test matches, then the rotation + translation (scale 0.85–1.15) that the
-most matches agree with; score = number of agreeing matches (inliers).
+**Retired** (results kept; still runnable):
 
-| Name | What |
-|---|---|
-| `ours` | OpenCV SIFT, OpenCV brute-force matching and RANSAC (randomized) |
-| `ours_raw` | `ours` without the upscale + CLAHE |
-| `ours_det` | `ours` with a deterministic transform search: every two-point transform from the 50 best matches is scored against all matches, the first with most inliers wins. Defined exactly (integer descriptor distances, fixed order of floating point operations), so the C implementation in our libfprint branch gives identical scores |
-| `ours_strict` | `ours_det` where each match must also be the gallery keypoint's nearest neighbour, and rotation is limited to 45° |
-| `union` | ArcticLampyrid's overlap score proposed on !530, on `ours_det` inliers: the union of probe keypoints that are inliers against any enrolled image, ×10000 / max(probe keypoints, mean enrolled keypoints) |
-| `vlsift`, `ftsift` | `ours_det` with SIFT from a C implementation instead of OpenCV's: VLFeat (BSD) or the one in a libfprint fork's FocalTech FT9366 driver (LGPL), built by `csift/build.sh` at pinned commits. For a matcher without OpenCV |
-| `akaze`, `orb`, `brisk` (+ `_raw`) | `ours` with binary keypoints and descriptors (Hamming distance) instead of SIFT |
+| Name | What | Why retired |
+|---|---|---|
+| `sigfm_fix` | SIGFM with Sergey Subbotin's ordering fix + 176 best matches | same accuracy as `sigfm`, threshold less stable |
+| `sigfm_pre` | SIGFM on upscaled + CLAHE images | raises impostor scores as much as genuine ones |
+| `ours`, `ours_raw` | inlier count, OpenCV SIFT + RANSAC | not reproducible (randomized); `ours_strict` equals it |
+| `ours_det`, `ours_strict`, `ours_det2` | deterministic search; `strict` adds mutual matches + ±45°; `det2` least squares refits | superseded by `ftsift_strict`; the refit changed nothing |
+| `vlsift`, `ftsift`, `vlsift_strict` | C SIFT from VLFeat (BSD) or FocalTech | `ftsift_strict` equals `vlsift_strict` and is LGPL |
+| `q_pca40`, `q_bin128`, `q_bin256`, `q_tern128` | compact SIFT descriptor codes, fit on the stranger sets (`bench/fit_quant.py`) | storage experiment; `q_tern128` worth revisiting for templates |
+| `union` | ArcticLampyrid's union-of-inliers score from !530 | FRR more than doubles |
+| `orb`, `brisk` (+ `_raw`) | binary descriptors | clearly worse than SIFT and AKAZE |
 
-Our libfprint branch is moving this matcher to plain C without OpenCV: the
-upscale + CLAHE (byte-identical to OpenCV 4.6 and 4.10) and the deterministic
-matching are done; the SIFT choice waits on the `vlsift` / `ftsift` results.
-When the matching code is built as `kpm/libkpm.so` (or `FPBENCH_KPM_LIB`),
-`ours_det`, `ours_strict`, `union` and the C SIFT matchers score through it;
-otherwise through the equivalent Python code.
-
-Scores are only comparable within a matcher, so matchers are compared at
-their own **zero-false-accept threshold**: the lowest threshold without any
-false accept in the run, and the false-reject rate there.
+The deterministic matching is in our libfprint branch as plain C
+(`fpi-keypoint-match.c`, with euclidean, Hamming and ternary descriptors) and
+gives scores identical to the Python code here. When it is built as
+`kpm/libkpm.so` (or `FPBENCH_KPM_LIB`), the matchers using it score through it.
 
 ## Results
 
-See [results/](results/) for the logs, the score matrices and the generated
-summaries (`bench/summarize.py`).
+Logs, score matrices and generated summaries (`bench/summarize.py`) in
+[results/](results/).
 
-### v1: 16 sets, 568 fingers, 1,440,034 impostor attempts
+### v1: all matchers
 
-Full summary: [results/v1/SUMMARY.md](results/v1/SUMMARY.md).
+16 sets, 568 fingers, 1,440,034 impostor attempts. `sigfm*`, `ours` and
+`ours_raw` from [results/v1](results/v1/SUMMARY.md), the rest from
+[results/v1-variants](results/v1-variants/SUMMARY.md) (OpenCV 4.10; its `ours`
+baseline reproduces v1: threshold 9, FRR 18.6%, 14.5% at FA 1e-5).
 
-| matcher | impostor max | FA @ 24 (SIGFM default) | zero-FA threshold | FRR registered @ zero-FA | FRR all @ zero-FA |
+| matcher | zero-FA threshold (range) | FRR there | FRR @ FA 1e-5 | per-set average FRR | bytes per enrolled image |
 |---|---|---|---|---|---|
-| `sigfm` | 27 | 1 | 28 | 17.2% | 51.8% |
-| `sigfm_fix` | 62 | 7 | 63 | 18.4% | 52.8% |
-| `sigfm_pre` | 90 | 145 | 91 | 17.5% | 52.1% |
-| `ours_raw` | 7 | — | 8 | 18.9% | 53.1% |
-| `ours` | 8 | — | 9 | 18.6% | 53.0% |
+| `sigfm` | 28 (19–28) | 17.2% | 15.1% | 36.4% | |
+| `sigfm_fix` | 63 (28–63) | 18.4% | 15.5% | 39.4% | |
+| `sigfm_pre` | 91 (58–91) | 17.5% | 15.1% | 38.7% | |
+| `ours_raw` | 8 (7–8) | 18.9% | 16.7% | 40.0% | |
+| `ours` | 9 (8–9) | 18.6% | 14.4% | 40.7% | |
+| `ours_det` | 10 (8–10) | 20.0% | 16.2% | 43.3% | 57,297 |
+| `ours_det2` | 10 (8–10) | 20.0% | 16.1% | 43.3% | 57,297 |
+| `ours_strict` | 9 (7–9) | 18.5% | 14.5% | 40.3% | 57,297 |
+| `vlsift` | 11 (10–11) | 16.4% | 14.4% | 36.4% | 66,963 |
+| `vlsift_strict` | 10 (8–10) | 15.7% | 13.3% | 35.6% | 66,963 |
+| `ftsift` | 14 (10–14) | 23.8% | 17.2% | 48.4% | 67,121 |
+| `ftsift_strict` | 8 (7–8) | 15.0% | 13.3% | 34.8% | 67,121 |
+| `q_pca40` | 10 (9–10) | 19.8% | 15.4% | 42.1% | 20,222 |
+| `q_bin256` | 9 (7–9) | 22.3% | 16.7% | 46.3% | 16,852 |
+| `q_bin128` | 9 (8–9) | 22.6% | 17.5% | 48.2% | 10,111 |
+| `q_tern128` | 13 (12–13) | 13.4% | 11.3% | 32.9% | 16,852 |
+| `akaze` | 9 (7–9) | 13.4% | 11.2% | 29.8% | |
+| `orb` | 13 (12–13) | 25.1% | 22.5% | 45.4% | |
+| `union` | 1221 (1026–1221) | 40.7% | 33.0% | 65.3% | |
 
-How stable these are (bootstrap over fingers, 5th–95th percentile), the FRR at
-a fixed false-accept rate of 1e-5 (≤ 14 false accepts), and the registered FRR
-averaged per set (11 sets with ≥ 20 registered attempts):
+- The deterministic search alone (`ours_det`) costs ~1.5 points against
+  RANSAC; mutual matches + ±45° (`ours_strict`) win it back; a least squares
+  refit (`ours_det2`) changes nothing.
+- The FocalTech SIFT is weak with plain matching (strangers up to 13) and
+  among the best with strict matching (strangers up to 7).
+- The pooled FRR is dominated by the clean sets (Neurotechnology, FVS); the
+  per-set average weighs every set equally.
 
-| matcher | zero-FA threshold (range) | FRR registered (range) | FRR @ FA 1e-5 | per-set average FRR |
+### Enrollment depth (v1)
+
+[results/enrollment-depth](results/enrollment-depth/SUMMARY.md).
+
+| enrolled images | 5 | 10 | 15 | 25 |
 |---|---|---|---|---|
-| `sigfm` | 28 (19–28) | 17.2% (13.8–20.2%) | 15.1% | 36.4% |
-| `sigfm_fix` | 63 (28–63) | 18.4% (14.1–20.9%) | 15.5% | 39.4% |
-| `sigfm_pre` | 91 (58–91) | 17.5% (13.5–20.1%) | 15.1% | 38.7% |
-| `ours_raw` | 8 (7–8) | 18.9% (15.3–22.4%) | 16.7% | 40.0% |
-| `ours` | 9 (8–9) | 18.6% (13.8–20.5%) | 14.4% | 40.7% |
+| `ours_det` threshold @ FA 1e-5 | 7 | 8 | 8 | 8 |
+| `ours_det` FRR @ FA 1e-5 | 17.3% | 16.2% | 14.2% | 12.7% |
+| `sigfm_fix` threshold @ FA 1e-5 | 13 | 21 | 22 | 26 |
+| `sigfm_fix` FRR @ FA 1e-5 | 17.4% | 15.5% | 13.9% | 12.0% |
 
-- **Accuracy is a tie.** The FRR ranges overlap completely.
-- **The threshold is where they differ.** SIGFM's default of 24 lets through
-  one stranger as is, and seven with the ordering fix. `sigfm_fix`'s
-  zero-FA threshold of 63 is set by a single impostor pair and moves between
-  28 and 63 when fingers are resampled. The inlier-count score of `ours`
-  stays at 8–9, which is what a per-driver constant needs.
-- **Preprocessing doesn't help SIGFM:** upscale + CLAHE raises impostor
-  scores as much as genuine ones.
-- **The pooled FRR is dominated by the clean sets.** Neurotechnology and FVS
-  are 72% of the registered genuine attempts; averaged per set, FRR is
-  36–41%. Per-set figures are in [results/v1/SUMMARY.md](results/v1/SUMMARY.md).
-- "all" includes genuine probes that don't overlap the enrolled area, so it is
-  dominated by placement, not the matcher.
+More enrolled images help both equally; SIGFM's threshold has to double from
+5 to 25 images to stay as safe, the inlier count's doesn't move.
 
-### v2 and UNSW 2D (preliminary, runs in progress)
+### v2 and strangers
 
-**v2** adds Tsinghua (320 fingers; the second impression is deliberately
-distorted) to the v1 sets: 880 fingers, 2,576,466 impostor attempts.
-**UNSW 2D** is a separate run on 1,452 fingers of a 150-person optical
-dataset, 8,347,595 impostor attempts. Summaries:
-[results/v2](results/v2/SUMMARY.md), [results/unsw-preliminary](results/unsw-preliminary/SUMMARY.md).
+[results/v2](results/v2/SUMMARY.md). v2 adds Tsinghua (320 fingers, one
+deliberately distorted impression) to v1.
 
-| run | matcher | impostor max | FA @ default | zero-FA threshold (range) | FRR registered there | FRR @ FA 1e-5 |
+| matcher | zero-FA threshold | FRR there | FRR @ FA 1e-5 | per-set average | SOCOFing strangers (10.3 M): max, FA @ default | Family strangers (656 k): max |
 |---|---|---|---|---|---|---|
-| v2 | `sigfm` | 28 | 5 @ 24 | 29 (24–29) | 24.6% | 21.9% |
-| v2 | `sigfm_fix` | 62 | 12 @ 24 | 63 (32–63) | 26.1% | 21.8% |
-| v2 | `ours` | 8 | 0 @ 10 | 9 (8–9) | 24.4% | 18.8% |
-| UNSW | `sigfm` | 100 | 72 @ 24 | 101 (53–101) | 6.2% | 3.8% |
-| UNSW | `sigfm_fix` | 133 | 236 @ 24 | 134 (84–134) | 6.1% | 3.8% |
-| UNSW | `ours` | 9 | 0 @ 10 | 10 (9–10) | 6.8% | 5.1% |
+| `sigfm` | 29 (24–29) | 24.6% | 21.9% | 38.3% | 15, 0 @ 24 | 2 |
+| `sigfm_fix` | 63 (32–63) | 26.1% | 21.8% | 40.2% | 29, 1 @ 24 | 10 |
+| `ours` | 9 (8–9) | 24.4% | 18.8% | 40.8% | 9, 0 @ 10 | 6 |
+| `akaze` | 9 (8–9) | 21.1% | 18.1% | 31.0% | | |
 
-Strangers only, against the 880 v2 enrollments: SOCOFing (10,333,840
-attempts) max 15 for `sigfm`, 29 for `sigfm_fix` (1 FA @ 24); Family
-(655,600) max 2 and 10. `ours` on these is running.
+### UNSW 2D (optical, 1,452 fingers)
 
-- **One constant threshold works for the inlier count:** its zero-FA
-  threshold is 8–9 on v1 and v2 and 9–10 on UNSW, and the default of 10 has
-  no false accept in any of them (2.58 M impostor attempts in v2, 8.35 M
-  in UNSW).
-  SIGFM's follows the data: ~28 on the contact sensor sets, ~100 on UNSW's
-  optical images.
-- UNSW's genuine side is much easier (clean optical impressions): 6–7% FRR.
-  There SIGFM is a little better at a fixed false-accept rate (3.8% vs
-  5.1%).
-- The current UNSW results include subject 6's duplicated impressions
-  (about 40 of 5,875 genuine probes, so FRR may be understated by up to 0.7
-  points); a rerun without them is queued.
-- The v2 logs predate excluding Tsinghua-vs-Tsinghua impostors (see
-  [docs/DATASETS.md](docs/DATASETS.md)): their impostor lines include those
-  same-finger pairs. The summaries recompute impostors and are what counts.
+[results/unsw](results/unsw/SUMMARY.md). `ours` is from a run that still
+included 25 duplicated impressions; reruns of the SIGFM variants without
+them changed FRR by 0.1 point at most.
 
-### v1 matcher variants (preliminary)
+| matcher | max impostor | FA @ default | zero-FA threshold | FRR there | FRR @ FA 1e-5 |
+|---|---|---|---|---|---|
+| `sigfm` | 100 | 72 @ 24 | 101 (53–101) | 6.2% | 3.9% |
+| `sigfm_fix` | 133 | 236 @ 24 | 134 (84–134) | 6.2% | 3.9% |
+| `ours` | 9 | 0 @ 10 | 10 (9–10) | 6.8% | 5.1% |
+| `akaze` | 12 (next: 9) | 1 @ 10 | 13 (9–13) | 6.9% | 3.8% |
 
-Run on the AI box (OpenCV 4.10); its `ours` baseline reproduces the v1
-numbers above (zero-FA threshold 9, FRR 18.6%, 14.5% at FA 1e-5).
+### New sets: smoke test on subsets
 
-| matcher | impostor max | zero-FA threshold (range) | FRR registered there | FRR @ FA 1e-5 |
-|---|---|---|---|---|
-| `ours` | 8 | 9 (8–9) | 18.6% | 14.5% |
-| `union` | 1220 | 1221 (1026–1221) | 40.7% | 33.0% |
+[results/new-sets-smoke](results/new-sets-smoke/SUMMARY.md): 56 PolyU fingers
+enrolled in one session and verified 2–24 months later, 86 NIST SD 302
+fingers enrolled and verified on different devices; ~30 k impostor attempts
+each, so thresholds aren't comparable with the full runs. FRR at each
+matcher's zero-FA threshold:
 
-The union score more than doubles the false rejects at the same false-accept
-level: normalizing by keypoint count favours impostors with few keypoints.
-(This is the formula as proposed, on our inliers; the proposal used SIGFM's
-matching.) `orb`, `akaze`, `ours_det`, `ours_strict`, `vlsift` and `ftsift`
-are running.
+| matcher | PolyU, cross-session | NIST, cross-device |
+|---|---|---|
+| `sigfm` | 52.7% | 43.0% |
+| `ours_strict` | 73.0% | 25.6% |
+| `q_tern128` | 34.1% | 16.3% |
+| `akaze` | **26.5%** | **14.0%** |
 
-### Speed (preliminary)
-
-Single thread, Intel i7-13700KF, real 96×96 captures, 20 enrolled images;
-measured while the benchmark was running on all cores, so upper bounds. A
-clean run is queued. Milliseconds:
-
-| matcher | extract | verify (extract + 20 matches) | identify over 10 fingers |
-|---|---|---|---|
-| `sigfm` | 6 | 23 | 198 |
-| `sigfm_fix` | 6 | 47 | 263 |
-| `ours` | 12 | 48 | 573 |
-| `ours_det` | 13 | 42 | 433 |
-| `ours_strict` | 15 | 29 | 310 |
-| `akaze` | 7 | 28 | 232 |
-| `vlsift` | 76 | 107 | 553 |
-| `ftsift` | 94 | 137 | 722 |
-| `orb` | 4 | 131 | 1329 |
-| `union` | 10 | 32 | 394 |
-
-Every matcher verifies in well under a second. The C SIFT implementations
-extract keypoints 6–8× slower than OpenCV's (not vectorized), which still
-fits. Matching for the `ours_det` family already went through the C library
-here (`kpm/libkpm.so`); `ours`, `sigfm*` and the binary matchers spend their
-time in OpenCV or SIGFM's C++.
+SIFT-based matching degrades most on these harder conditions. Only 23% of
+NIST's cross-device impressions could be registered to their enrollment
+impression, to be looked into before a full NIST run.
 
 ### Real sensor: Elan 04f3:0c3d, one person
 
-Ten fingers, 205 presses in four sessions (normal skin, freshly washed
-hands). Each finger is enrolled from 10 presses of one session; impostors are
-the other nine fingers of the same person (1,845 attempts), genuine attempts
-the presses of the other sessions (105). `bench/cross_finger.py`, at each
-matcher's default threshold. One person, so a sanity check of the real
-sensor's images rather than a false-accept estimate.
+Ten fingers, 301 presses in five sessions (normal skin, freshly washed hands,
+dry skin at night). Each finger is enrolled from 10 presses of one session;
+impostors are the other nine fingers of the same person (2,709 attempts),
+genuine attempts the presses of the other sessions (201).
+`bench/cross_finger.py`. One person, so a check of the real sensor's images
+rather than a false-accept estimate.
 
-| matcher | impostor max | FA @ default | genuine rejected @ default |
+| matcher | impostor max | FA | genuine rejected |
 |---|---|---|---|
-| `sigfm` | 8 | 0 @ 24 | 9 |
-| `sigfm_fix` | 8 | 0 @ 24 | 8 |
-| `ours` | 5 | 0 @ 10 | 11 |
-| `ours_raw` | 4 | 0 @ 10 | 11 |
-| `ours_det` | 7 | 0 @ 10 | 11 |
-| `ours_strict` | 5 | 0 @ 10 | 11 |
-| `vlsift` | 6 | 0 @ 10 | 8 |
-| `ftsift` | 7 | 0 @ 10 | 9 |
-| `akaze` | 4 | 0 @ 10 | 12 |
-| `orb` | 9 | 0 @ 10 | 16 |
-| `orb_raw` | 8 | 0 @ 10 | 31 |
-| `brisk` | 8 | 0 @ 10 | 30 |
-| `union` | 860 | 0 @ 1000 | 16 |
+| `sigfm` @ 24 | 8 | 0 | 14 |
+| `ftsift_strict` @ 10 | 5 | 0 | 14 |
+| `ours_det` @ 10 | 7 | 0 | 17 |
+| `q_tern128` @ 13 | 10 | 0 | 10 |
+| `akaze` @ 10 | 4 | 0 | 23 |
 
 - No sign of fixed-pattern matches (impostor scores far above the rest, as
   reported for some Goodix sensors on !530); the elan driver subtracts a
   background frame.
-- Genuine rejections are mostly thumbs (all of `sigfm`'s and `sigfm_fix`'s,
-  9 of 11 for `ours`), much larger than the 96x96 window: a press often
-  lands on skin that wasn't enrolled.
-- Two captures first looked like false accepts; both were labelling
-  mistakes during collection (wrong finger pressed) and are excluded.
-- The C SIFT implementations (`vlsift`, `ftsift`) do at least as well as
-  OpenCV's here.
+- Genuine rejections are mostly thumbs, much larger than the 96×96 window: a
+  press often lands on skin that wasn't enrolled.
+- Six captures first looked like false accepts; all were labelling mistakes
+  during collection (the first presses after a finger change made with the
+  previous finger) and are excluded. The capture tool now waits for a key at
+  each finger change.
+- An earlier table on the first 205 presses with all matchers is in the git
+  history.
 
+### Speed (preliminary)
 
-## Next round (running now)
+Single thread, Intel i7-13700KF, real 96×96 captures, 20 enrolled images;
+measured while the benchmark ran on all cores, so upper bounds. Milliseconds:
 
-- v1 matcher variants: `orb`, `akaze`, `ours_det`, `ours_strict`, and the C
-  SIFT matchers `vlsift` and `ftsift`. Decides which SIFT (if any) the C
-  matcher uses, and whether the deterministic search and the strict variant
-  cost accuracy.
-- `ours` on the v2 stranger sets (SOCOFing 10.3 M attempts, Family).
-- Enrollment depth: `ours_det` and `sigfm_fix` with 5, 10, 15 and 25
-  enrolled images. More enrolled images help genuine attempts (thumbs on
-  the real sensor) but give impostors more chances; this measures both.
-- UNSW 2D rerun of `sigfm`, `sigfm_fix` and `ours` without the duplicated
-  impressions.
-- Speed on an idle machine, 25 repeats, with 20 and 10 enrolled images.
+| matcher | extract | verify (extract + 20 matches) | identify over 10 fingers |
+|---|---|---|---|
+| `sigfm` | 6 | 23 | 198 |
+| `akaze` | 7 | 28 | 232 |
+| `ours_strict` | 15 | 29 | 310 |
+| `ftsift` | 94 | 137 | 722 |
 
-Then: the C matcher in libfprint with the chosen SIFT, scored through
-libfprint's virtual image driver (as requested on !530), and more real-sensor
-sessions and people.
+Every matcher verifies in well under a second. The FocalTech SIFT extracts
+keypoints ~6× slower than OpenCV's (not vectorized), which still fits.
+
+## Next
+
+- AKAZE in C (nonlinear diffusion scale space, MLDB descriptors) for the
+  deterministic C matcher, and why AKAZE scores lower on the Elan 0c3d.
+- Full PolyU and NIST SD 302 runs of the three matchers, after looking into
+  NIST's low registration rate.
+- More real-sensor sessions and people.
+- The chosen matcher in libfprint, scored through its virtual image driver
+  (as requested on !530).
 
 ## Running it
 
