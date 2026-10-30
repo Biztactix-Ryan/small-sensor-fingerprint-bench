@@ -24,6 +24,9 @@ the same patches.
 
 | Name | What |
 |---|---|
+| `ours_det`, `ours_strict` | `ours` with a deterministic transform search; `strict` adds mutual nearest neighbours and a 45° rotation limit |
+| `union` | ArcticLampyrid's overlap score from !530: union of inliers over all enrolled images, normalized by keypoint count |
+| `orb`, `akaze`, `brisk` (+ `_raw`) | `ours` with binary descriptors instead of SIFT |
 | `sigfm` | SIGFM as in libfprint !530 (commit `bc986621`), built from its sources by `sigfm/build.sh` |
 | `sigfm_fix` | the same with the fix proposed on !530 by Sergey Subbotin: full ordering of matches (the original `operator<` only compares `y`) and keeping the 176 best matches |
 | `sigfm_pre` | unmodified SIGFM on images upscaled 2× and CLAHE-equalized |
@@ -51,14 +54,31 @@ Full summary: [results/v1/SUMMARY.md](results/v1/SUMMARY.md).
 | `ours_raw` | 7 | — | 8 | 18.9% | 53.1% |
 | `ours` | 8 | — | 9 | 18.6% | 53.0% |
 
-- SIGFM's default threshold of 24 lets through one stranger as is, and seven
-  with the ordering fix. Its threshold has to be recalibrated with the fix.
-- At each matcher's own zero-false-accept threshold, all five are within
-  ~1.5 points FRR. The upscale + CLAHE preprocessing doesn't help SIGFM: it
-  raises impostor scores as much as genuine ones.
-- "all" includes genuine probes that don't overlap the enrolled area (see
-  [SCALING.md](docs/SCALING.md)), so it is dominated by placement, not the
-  matcher. On clean sets (FVS, Neurotechnology) registered FRR is 0–10%.
+How stable these are (bootstrap over fingers, 5th–95th percentile), the FRR at
+a fixed false-accept rate of 1e-5 (≤ 14 false accepts), and the registered FRR
+averaged per set (11 sets with ≥ 20 registered attempts):
+
+| matcher | zero-FA threshold (range) | FRR registered (range) | FRR @ FA 1e-5 | per-set average FRR |
+|---|---|---|---|---|
+| `sigfm` | 28 (19–28) | 17.2% (13.8–20.2%) | 15.1% | 36.4% |
+| `sigfm_fix` | 63 (28–63) | 18.4% (14.1–20.9%) | 15.5% | 39.4% |
+| `sigfm_pre` | 91 (58–91) | 17.5% (13.5–20.1%) | 15.1% | 38.7% |
+| `ours_raw` | 8 (7–8) | 18.9% (15.3–22.4%) | 16.7% | 40.0% |
+| `ours` | 9 (8–9) | 18.6% (13.8–20.5%) | 14.4% | 40.7% |
+
+- **Accuracy is a tie.** The FRR ranges overlap completely.
+- **The threshold is where they differ.** SIGFM's default of 24 lets through
+  one stranger as is, and seven with the ordering fix. `sigfm_fix`'s
+  zero-FA threshold of 63 is set by a single impostor pair and moves between
+  28 and 63 when fingers are resampled. The inlier-count score of `ours`
+  stays at 8–9, which is what a per-driver constant needs.
+- **Preprocessing doesn't help SIGFM:** upscale + CLAHE raises impostor
+  scores as much as genuine ones.
+- **The pooled FRR is dominated by the clean sets.** Neurotechnology and FVS
+  are 72% of the registered genuine attempts; averaged per set, FRR is
+  36–41%. Per-set figures are in [results/v1/SUMMARY.md](results/v1/SUMMARY.md).
+- "all" includes genuine probes that don't overlap the enrolled area, so it is
+  dominated by placement, not the matcher.
 
 v2 (adds Tsinghua and 7,500 single-impression strangers from SOCOFing and
 Family) is in progress.
