@@ -162,7 +162,7 @@ def a_worker(job):
     for p in jittered(img, 2, 30, rng):
         for pol in (p, 255 - p):
             f = MATCH.load(MATCH.features_img(pol))
-            res.append([max(MATCH.score(f, g) for g in gal) for gal in G_OURS.values()])
+            res.append([best(f, gal) for gal in G_OURS.values()])
     return res
 
 
@@ -213,10 +213,17 @@ def feat_worker(job):
     return [MATCH.features_img(p) for p in jittered(img, n, jitter, rng, at)], aligned
 
 
+def best(f, gallery):
+    """Score of one probe against one finger's enrolled images."""
+    if hasattr(MATCH, "score_set"):
+        return MATCH.score_set(f, gallery)
+    return max(MATCH.score(f, g) for g in gallery)
+
+
 def b_worker(probe):
     """Best score of one probe against every template."""
     f = G_FEATS["probes"][probe]
-    return [max(MATCH.score(f, g) for g in tmpl) for tmpl in G_FEATS["templates"]]
+    return [best(f, tmpl) for tmpl in G_FEATS["templates"]]
 
 
 def run_b(idx, stages, jitter, nprobes):
@@ -329,7 +336,7 @@ def c_worker(job):
     if img is None or min(img.shape) < pub.SIZE:
         return []
     rng = random.Random(seed)
-    return [[max(MATCH.score(f, g) for g in tmpl) for tmpl in G_FEATS["templates"]]
+    return [[best(f, tmpl) for tmpl in G_FEATS["templates"]]
             for f in (MATCH.load(MATCH.features_img(p)) for p in jittered(img, n, 20, rng))]
 
 

@@ -5,7 +5,10 @@
 For every part B matrix (big_eval_b_<matcher>*.npz): impostor maximum, the
 lowest threshold without false accepts and the genuine false-reject rate there,
 the false accepts at the matcher's default threshold, and the false-reject
-rate per set. For part C matrices (big_eval_c_<set>_<matcher>*.npz): stranger
+rate per set. A second table gives the false-reject rate at a fixed
+false-accept rate (1e-5) and per set averaged, and how much the zero-FA
+threshold and its false-reject rate move when the fingers are resampled
+(bootstrap over fingers, 5th-95th percentile). For part C matrices (big_eval_c_<set>_<matcher>*.npz): stranger
 score maximum and false accepts at the default threshold.
 
 "registered" genuine attempts are those whose probe impression could be
@@ -35,7 +38,7 @@ def matcher_of(path, prefix):
 
 
 def part_b(path):
-    d = np.load(path, allow_pickle=True)
+    d = np.load(path, allow_pickle=False)
     M, powner, paligned = d["M"], d["powner"], d["paligned"]
     keep, names = list(d["keep"]), list(d["names"])
     ident = [pub.identity(names[i]) for i in keep]
@@ -53,6 +56,53 @@ def part_b(path):
             elif ident[j] != ident[own]:
                 imp.append(M[pi, j])
     return np.array(gen), np.array(reg), np.array(imp), np.array(gset), len(keep)
+
+
+def threshold_at(hist, k):
+    """Lowest threshold with at most k (weighted) impostor scores at or above."""
+    above = np.cumsum(hist[::-1])[::-1]  # above[t] = weight of scores >= t
+    return int(np.argmax(above <= k))
+
+
+def stats(path, rate=1e-5, rounds=200, min_set=20):
+    """Zero-FA threshold and FRR (registered) with bootstrap ranges over
+    fingers, FRR at a false-accept rate, and FRR averaged over sets."""
+    d = np.load(path, allow_pickle=False)
+    M, powner, paligned = d["M"], d["powner"], d["paligned"]
+    keep, names = list(d["keep"]), list(d["names"])
+    col = {k: j for j, k in enumerate(keep)}
+    ident = np.array([pub.identity(names[i]) for i in keep])
+    rows = np.array([pi for pi, k in enumerate(powner) if k in col])
+    own = np.array([col[powner[pi]] for pi in rows])
+    S = M[rows]
+    imp_mask = ident[None, :] != ident[own][:, None]
+    gen = S[np.arange(len(rows)), own]
+    reg = paligned[rows]
+    gset = np.array([names[keep[o]].split("/")[0] for o in own])
+    top = int(S[imp_mask].max()) + 2
+    imp_scores = np.minimum(S, top - 1)
+
+    def evaluate(w):
+        wi = (w[own][:, None] * w[None, :]) * imp_mask
+        hist = np.bincount(imp_scores.ravel(), weights=wi.ravel(), minlength=top)
+        zt = threshold_at(hist, 0)
+        wg = w[own] * reg
+        frr = (wg * (gen < zt)).sum() / max(wg.sum(), 1)
+        return zt, frr, hist, wi.sum()
+
+    zt, frr, hist, n_imp = evaluate(np.ones(len(keep)))
+    k = int(rate * n_imp)
+    kt = threshold_at(hist, k)
+    frr_k = (gen[reg] < kt).mean()
+    sets = [x for x in np.unique(gset) if (reg & (gset == x)).sum() >= min_set]
+    set_mean = np.mean([(gen[reg & (gset == x)] < zt).mean() for x in sets])
+    rng = np.random.default_rng(0)
+    boot = [evaluate(np.bincount(rng.integers(0, len(keep), len(keep)), minlength=len(keep)).astype(float))[:2]
+            for _ in range(rounds)]
+    bt, bf = np.array(boot).T
+    return dict(zt=zt, frr=frr, zt_lo=int(np.percentile(bt, 5)), zt_hi=int(np.percentile(bt, 95)),
+                frr_lo=np.percentile(bf, 5), frr_hi=np.percentile(bf, 95), k=k, kt=kt, frr_k=frr_k,
+                set_mean=set_mean, nsets=len(sets))
 
 
 def main():
@@ -89,6 +139,21 @@ def main():
             cells = [f"{100 * per_set[c][s][0] / per_set[c][s][1]:.1f}%" if per_set[c][s][1] else "-"
                      for c in cols]
             print(f"| {s} | {n} | " + " | ".join(cells) + " |")
+    if bs:
+        print("\n### Uncertainty, fixed false-accept rate and per-set average\n")
+        print("Bootstrap over fingers (200 resamples, 5th-95th percentile). FA <= k: k = 1e-5 x "
+              "impostor attempts. Per-set average: registered FRR at the zero-FA threshold, mean "
+              "over sets with at least 20 registered attempts.\n")
+        print("| matcher | run | zero-FA threshold (range) | FRR registered @ zero-FA (range) "
+              "| threshold @ FA <= k | FRR registered @ FA <= k | per-set average FRR @ zero-FA |")
+        print("|---|---|---|---|---|---|---|")
+        for p in bs:
+            name, run = matcher_of(p, "big_eval_b_")
+            r = stats(p)
+            print(f"| {name} | {run or '-'} | {r['zt']} ({r['zt_lo']}-{r['zt_hi']}) "
+                  f"| {100 * r['frr']:.1f}% ({100 * r['frr_lo']:.1f}-{100 * r['frr_hi']:.1f}%) "
+                  f"| {r['kt']} (k={r['k']}) | {100 * r['frr_k']:.1f}% "
+                  f"| {100 * r['set_mean']:.1f}% ({r['nsets']} sets) |")
     cs = sorted(glob.glob(os.path.join(out, "big_eval_c_*.npz")))
     if cs:
         print("\n## Strangers only (part C)\n")
@@ -98,7 +163,7 @@ def main():
             setname = os.path.basename(p)[len("big_eval_c_"):].split("_")[0]
             name, run = matcher_of(p, f"big_eval_c_{setname}_")
             m = matchers.get(name)
-            M = np.load(p, allow_pickle=True)["M"]
+            M = np.load(p, allow_pickle=False)["M"]
             print(f"| {setname} | {name} | {run or '-'} | {M.size} | {int(M.max())} "
                   f"| {int((M >= m.default).sum())} | {m.default} |")
 

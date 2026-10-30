@@ -26,3 +26,15 @@
 | minex | 39 | 79.5% | 79.5% | 71.8% | 74.4% | 76.9% |
 | neuro_crossmatch | 378 | 7.7% | 5.0% | 4.5% | 5.3% | 7.1% |
 | neuro_uareu | 474 | 6.1% | 9.9% | 7.8% | 8.4% | 5.3% |
+
+### Uncertainty, fixed false-accept rate and per-set average
+
+Bootstrap over fingers (200 resamples, 5th-95th percentile). FA <= k: k = 1e-5 x impostor attempts. Per-set average: registered FRR at the zero-FA threshold, mean over sets with at least 20 registered attempts.
+
+| matcher | run | zero-FA threshold (range) | FRR registered @ zero-FA (range) | threshold @ FA <= k | FRR registered @ FA <= k | per-set average FRR @ zero-FA |
+|---|---|---|---|---|---|---|
+| ours | - | 9 (8-9) | 18.6% (13.8-20.5%) | 7 (k=14) | 14.4% | 40.7% (11 sets) |
+| ours_raw | - | 8 (7-8) | 18.9% (15.3-22.4%) | 7 (k=14) | 16.7% | 40.0% (11 sets) |
+| sigfm | - | 28 (19-28) | 17.2% (13.8-20.2%) | 14 (k=14) | 15.1% | 36.4% (11 sets) |
+| sigfm_fix | - | 63 (28-63) | 18.4% (14.1-20.9%) | 21 (k=14) | 15.5% | 39.4% (11 sets) |
+| sigfm_pre | - | 91 (58-91) | 17.5% (13.5-20.1%) | 46 (k=14) | 15.1% | 38.7% (11 sets) |
