@@ -80,8 +80,82 @@ averaged per set (11 sets with ≥ 20 registered attempts):
 - "all" includes genuine probes that don't overlap the enrolled area, so it is
   dominated by placement, not the matcher.
 
-v2 (adds Tsinghua and 7,500 single-impression strangers from SOCOFing and
-Family) is in progress.
+### v2 and UNSW 2D (preliminary, runs in progress)
+
+**v2** adds Tsinghua (320 fingers; the second impression is deliberately
+distorted) to the v1 sets: 880 fingers, 2,576,466 impostor attempts.
+**UNSW 2D** is a separate run on 1,452 fingers of a 150-person optical
+dataset, 8,347,595 impostor attempts. Summaries:
+[results/v2](results/v2/SUMMARY.md), [results/unsw-preliminary](results/unsw-preliminary/SUMMARY.md).
+
+| run | matcher | impostor max | FA @ default | zero-FA threshold (range) | FRR registered there | FRR @ FA 1e-5 |
+|---|---|---|---|---|---|---|
+| v2 | `sigfm` | 28 | 5 @ 24 | 29 (24–29) | 24.6% | 21.9% |
+| v2 | `sigfm_fix` | 62 | 12 @ 24 | 63 (32–63) | 26.1% | 21.8% |
+| v2 | `ours` | 8 | 0 @ 10 | 9 (8–9) | 24.4% | 18.8% |
+| UNSW | `sigfm` | 100 | 72 @ 24 | 101 (53–101) | 6.2% | 3.8% |
+| UNSW | `sigfm_fix` | 133 | 236 @ 24 | 134 (84–134) | 6.1% | 3.8% |
+| UNSW | `ours` | 9 | 0 @ 10 | 10 (9–10) | 6.8% | 5.1% |
+
+Strangers only, against the 880 v2 enrollments: SOCOFing (10,333,840
+attempts) max 15 for `sigfm`, 29 for `sigfm_fix` (1 FA @ 24); Family
+(655,600) max 2 and 10. `ours` on these is running.
+
+- **One constant threshold works for the inlier count:** its zero-FA
+  threshold is 8–9 on v1 and v2 and 9–10 on UNSW, and the default of 10 has
+  no false accept in any of them (2.58 M impostor attempts in v2, 8.35 M
+  in UNSW).
+  SIGFM's follows the data: ~28 on the contact sensor sets, ~100 on UNSW's
+  optical images.
+- UNSW's genuine side is much easier (clean optical impressions): 6–7% FRR.
+  There SIGFM is a little better at a fixed false-accept rate (3.8% vs
+  5.1%).
+- Pending: `ours` on the stranger sets; v1 runs of `ours_det`,
+  `ours_strict`, `union`, `orb`, `akaze` and the C SIFTs; the enrollment
+  depth sweep (5–25 stages); a UNSW rerun without duplicate impressions
+  (the current UNSW results include subject 6's duplicated impressions,
+  about 40 of 5,875 genuine probes, so FRR may be understated by up to
+  0.7 points).
+- The v2 logs predate excluding Tsinghua-vs-Tsinghua impostors (see
+  [docs/DATASETS.md](docs/DATASETS.md)): their impostor lines include those
+  same-finger pairs. The summaries recompute impostors and are what counts.
+
+### Real sensor: Elan 04f3:0c3d, one person
+
+Ten fingers, 205 presses in four sessions (normal skin, freshly washed
+hands). Each finger is enrolled from 10 presses of one session; impostors are
+the other nine fingers of the same person (1,845 attempts), genuine attempts
+the presses of the other sessions (105). `bench/cross_finger.py`, at each
+matcher's default threshold. One person, so a sanity check of the real
+sensor's images rather than a false-accept estimate.
+
+| matcher | impostor max | FA @ default | genuine rejected @ default |
+|---|---|---|---|
+| `sigfm` | 8 | 0 @ 24 | 9 |
+| `sigfm_fix` | 8 | 0 @ 24 | 8 |
+| `ours` | 5 | 0 @ 10 | 11 |
+| `ours_raw` | 4 | 0 @ 10 | 11 |
+| `ours_det` | 7 | 0 @ 10 | 11 |
+| `ours_strict` | 5 | 0 @ 10 | 11 |
+| `vlsift` | 6 | 0 @ 10 | 8 |
+| `ftsift` | 7 | 0 @ 10 | 9 |
+| `akaze` | 4 | 0 @ 10 | 12 |
+| `orb` | 9 | 0 @ 10 | 16 |
+| `orb_raw` | 8 | 0 @ 10 | 31 |
+| `brisk` | 8 | 0 @ 10 | 30 |
+| `union` | 860 | 0 @ 1000 | 16 |
+
+- No sign of fixed-pattern matches (impostor scores far above the rest, as
+  reported for some Goodix sensors on !530); the elan driver subtracts a
+  background frame.
+- Genuine rejections are mostly thumbs (all of `sigfm`'s and `sigfm_fix`'s,
+  9 of 11 for `ours`), much larger than the 96x96 window: a press often
+  lands on skin that wasn't enrolled.
+- Two captures first looked like false accepts; both were labelling
+  mistakes during collection (wrong finger pressed) and are excluded.
+- The C SIFT implementations (`vlsift`, `ftsift`) do at least as well as
+  OpenCV's here.
+
 
 ## Running it
 
