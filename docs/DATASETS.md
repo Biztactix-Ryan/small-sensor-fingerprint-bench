@@ -23,6 +23,7 @@ does not state it or states it wrongly.
 | `fvs` | 21 × 8 | 394 dpi (measured) | public download | `http://fvs.sourceforge.net/fingerprint_bitmaps.zip` |
 | `minex` | 50 subjects × 10 fingers × 2 | 500 dpi | public (NIST) | `https://github.com/usnistgov/minex` (`minexiii/validation`), then `bench/prepare_minex.py DIR` |
 | `tsinghua` | 320 × 2 (normal + distorted) | 449 dpi (measured) | public download, terms not stated | Tsinghua Distorted Fingerprint Database (TDFD), `https://ivg.au.tsinghua.edu.cn/dataset/samples_TDFD/TDFD/Tsinghua%20Distorted%20Fingerprint%20Database.zip` |
+| `nist302_plain` | ~2000 fingers (200 people × 10) × 2–3 plain impressions, each from a different device | 500 dpi | NIST, on request; terms agreed when obtaining it (no redistribution) | NIST Special Database 302, part d (auxiliary plain captures), `https://nigos.nist.gov/datasets/sd302/request`; errata applied: 00002302 device L thumbs swapped |
 | `polyu_cross` | 336 × 6, of which 160 also × 6 in a second session 2–24 months later | 512 dpi (sensor; see SCALING.md) | research and non-commercial use only, cite | C. Lin, A. Kumar, *Matching Contactless and Contact-based Conventional Fingerprint Images for Biometrics Identification*, IEEE TIP 27, 2018; The Hong Kong Polytechnic University Contactless 2D to Contact-based 2D Fingerprint Images Database (contact-based part only) |
 | `unsw2d` | 1500 (150 subjects × 10) × 4 | 433 dpi (measured; the BMP headers say 500) | public download, research use only, cite | J. Hu, W. Zhou, *2D and 3D biometrics fingerprint dataset in contactless and labeled conditions*, Dryad, 2023, `https://doi.org/10.5061/dryad.612jm649q` (`2D_Database.7z` only) |
 
@@ -45,6 +46,7 @@ DIR/fvs/19_1.bmp
 DIR/minex/minexiii/...              (git checkout), DIR/minex/png/a001_02.png (prepare_minex.py)
 DIR/tsinghua/Tsinghua Distorted Fingerprint Database/<finger>/<image>.png
 DIR/unsw2d/2D Database/<subject>_<finger>_<impression>.bmp
+DIR/nist302_plain/images/auxiliary/flat/<device>/500/plain/png/<subject>_<device>_500_plain_<finger>.png
 DIR/polyu_cross/contact-based_fingerprints/{first,second}_session/<finger>_<impression>.jpg
 ```
 
@@ -69,7 +71,8 @@ Dataset index: [IAPR TC4 fingerprint datasets](https://iapr-tc4.org/fingerprint-
 ## Not (yet) included
 
 Free on request, licensed (no redistribution; results may be published):
-NIST SD302 and SD301 (`https://nigos.nist.gov/datasets/sd302/request`),
+NIST SD301, the rest of SD302 (rolled prints of 302a vary in resolution by
+device and aren't used yet),
 CASIA-FingerprintV5, FVC2006 (its DB1 is a 96×96 small-area sensor).
 Paid: the FVC2000/2002/2004 "A" sets, used in the benchmarks posted on
 libfprint MR !530.

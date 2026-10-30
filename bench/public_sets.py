@@ -44,6 +44,9 @@ SETS = {
     # ridge period is ~12% finer than neuro_uareu's: a population
     # difference, not resolution, so the sensor's resolution is used.
     "polyu_cross": (512, False),
+    # NIST SD 302d: plain impressions of ~2000 fingers on up to 3 of 4
+    # devices (K, L, M, P) at 500 ppi; genuine attempts are across devices
+    "nist302_plain": (500, False),
 }
 
 # one impression per finger, so only usable as strangers (big_eval part C);
@@ -91,6 +94,17 @@ def index():
                 if key not in seen:
                     seen.add(key)
                     out.append((name, f"{name}/{m[1]}_{m[2]}", m[3], p))
+            continue
+        if name == "nist302_plain":
+            for p in glob.glob(os.path.join(d, "images", "auxiliary", "flat", "*", "500", "plain", "png", "*.png")):
+                m = re.fullmatch(r"(\d+)_([A-Z])_500_plain_(\d+)\.png", os.path.basename(p))
+                if not m:
+                    continue
+                frgp = int(m[3])
+                # errata (13 July 2023): 00002302 device L has the thumbs swapped
+                if m[1] == "00002302" and m[2] == "L" and frgp in (1, 6):
+                    frgp = 7 - frgp
+                out.append((name, f"{name}/{m[1]}_{frgp:02d}", m[2], p))
             continue
         if name == "polyu_cross":
             # sessions 2-24 months apart; impressions keyed so that session 1
