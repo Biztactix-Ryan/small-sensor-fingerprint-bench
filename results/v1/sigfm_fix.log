@@ -1,0 +1,57 @@
+matcher: sigfm_fix
+2853 public images, 657 fingers, sensor 542 dpi
+
+=== A. strangers vs our 3 enrolled fingers (10872 probe patches, 32616 attempts, 30s)
+score histogram: {0: 32509, 1: 59, 2: 17, 3: 13, 4: 9, 5: 3, 6: 2, 7: 1, 8: 1, 11: 1, 14: 1}
+   threshold  10: false accepts 2/32616
+   threshold  15: false accepts 0/32616
+   threshold  24: false accepts 0/32616
+   threshold  45: false accepts 0/32616
+   threshold 100: false accepts 0/32616
+   threshold 200: false accepts 0/32616
+   threshold 500: false accepts 0/32616
+   threshold 1000: false accepts 0/32616
+   impressions registered to the enrollment impression: 1343/2196
+
+=== B. simulated enroll/verify: 568 public fingers, 10 stages, jitter 20px, 2695 probes (features 43s)
+   1530760 probe x template comparisons in 956s
+   genuine attempts 2541 (1411 registered), impostor attempts 1440034
+   threshold  false-reject% (registered / all)  false-accepts
+          10      13.5 /  49.0             60/1440034
+          15      14.3 /  49.7             27/1440034
+          24      15.8 /  50.8             7/1440034
+          45      17.4 /  52.1             1/1440034
+         100      19.7 /  53.6             0/1440034
+         200      22.7 /  55.5             0/1440034
+         500      26.8 /  58.2             0/1440034
+        1000      31.7 /  61.2             0/1440034
+   same finger number in sister datasets (excluded from impostors): 713 attempts, 133 score >= 24, max 8446
+   impostor score histogram: {0: 1435369, 1: 2741, 2: 807, 3: 532, 4: 222, 5: 103, 6: 103, 7: 51, 8: 25, 9: 21, 10: 14, 11: 6, 12: 5, 13: 4, 14: 4, 15: 2, 16: 3, 17: 1, 18: 2, 19: 4, 20: 4, 21: 3, 23: 1, 25: 1, 27: 1, 28: 2, 42: 1, 43: 1, 62: 1}
+   genuine false-reject% by set at threshold 24:
+      fvc2000_DB1_B      registered  72.7% (n=22)  all  77.9% (n=77)
+      fvc2000_DB2_B      registered  32.5% (n=40)  all  49.1% (n=55)
+      fvc2000_DB3_B      registered  62.8% (n=43)  all  75.9% (n=79)
+      fvc2000_DB4_B      registered    n/a (n=0)  all  94.9% (n=78)  synthetic
+      fvc2002_DB1_B      registered  12.5% (n=32)  all  56.2% (n=80)
+      fvc2002_DB2_B      registered   6.7% (n=60)  all  22.5% (n=80)
+      fvc2002_DB3_B      registered  66.7% (n=6)  all  97.4% (n=77)
+      fvc2002_DB4_B      registered    n/a (n=0)  all 100.0% (n=78)  synthetic
+      fvc2004_DB1_B      registered  57.1% (n=14)  all  86.1% (n=72)
+      fvc2004_DB2_B      registered  72.1% (n=61)  all  78.5% (n=79)
+      fvc2004_DB3_B      registered  39.7% (n=68)  all  47.4% (n=78)
+      fvc2004_DB4_B      registered  37.5% (n=8)  all  91.7% (n=72)  synthetic
+      fvs                registered   0.0% (n=166)  all   1.2% (n=168)
+      minex              registered  69.2% (n=39)  all  97.6% (n=575)
+      neuro_crossmatch   registered   3.7% (n=378)  all   6.1% (n=394)
+      neuro_uareu        registered   6.8% (n=474)  all   8.2% (n=499)
+   highest impostor scores:
+      (62, 'neuro_crossmatch', 'neuro_crossmatch/027_7', 'neuro_uareu/012_5')
+      (43, 'neuro_crossmatch', 'neuro_crossmatch/022_6', 'minex/033_05')
+      (42, 'neuro_crossmatch', 'neuro_crossmatch/013_7', 'fvs/13')
+      (28, 'neuro_crossmatch', 'neuro_crossmatch/045_4', 'neuro_crossmatch/017_7')
+      (28, 'neuro_crossmatch', 'neuro_crossmatch/022_6', 'neuro_crossmatch/045_6')
+      (27, 'neuro_uareu', 'neuro_uareu/022_5', 'neuro_uareu/017_1')
+      (25, 'fvs', 'fvs/8', 'fvc2002_DB2_B/101')
+      (23, 'neuro_crossmatch', 'neuro_crossmatch/022_6', 'neuro_uareu/013_7')
+      (21, 'neuro_uareu', 'neuro_uareu/022_7', 'neuro_crossmatch/017_6')
+      (21, 'neuro_uareu', 'neuro_uareu/022_10', 'neuro_uareu/027_10')

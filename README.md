@@ -39,7 +39,29 @@ false accept in the run, and the false-reject rate there.
 See [results/](results/) for the logs, the score matrices and the generated
 summaries (`bench/summarize.py`).
 
-<!-- RESULTS -->
+### v1: 16 sets, 568 fingers, 1,440,034 impostor attempts
+
+Full summary: [results/v1/SUMMARY.md](results/v1/SUMMARY.md).
+
+| matcher | impostor max | FA @ 24 (SIGFM default) | zero-FA threshold | FRR registered @ zero-FA | FRR all @ zero-FA |
+|---|---|---|---|---|---|
+| `sigfm` | 27 | 1 | 28 | 17.2% | 51.8% |
+| `sigfm_fix` | 62 | 7 | 63 | 18.4% | 52.8% |
+| `sigfm_pre` | 90 | 145 | 91 | 17.5% | 52.1% |
+| `ours_raw` | 7 | — | 8 | 18.9% | 53.1% |
+| `ours` | 8 | — | 9 | 18.6% | 53.0% |
+
+- SIGFM's default threshold of 24 lets through one stranger as is, and seven
+  with the ordering fix. Its threshold has to be recalibrated with the fix.
+- At each matcher's own zero-false-accept threshold, all five are within
+  ~1.5 points FRR. The upscale + CLAHE preprocessing doesn't help SIGFM: it
+  raises impostor scores as much as genuine ones.
+- "all" includes genuine probes that don't overlap the enrolled area (see
+  [SCALING.md](docs/SCALING.md)), so it is dominated by placement, not the
+  matcher. On clean sets (FVS, Neurotechnology) registered FRR is 0–10%.
+
+v2 (adds Tsinghua and 7,500 single-impression strangers from SOCOFing and
+Family) is in progress.
 
 ## Running it
 
@@ -71,6 +93,10 @@ For another sensor, measure its resolution first
   in 1,260 pairs against a standalone C++ build.
 - `ours` gives the same scores as the C implementation in our libfprint
   branch.
+- `ours*` are not bit-reproducible: OpenCV's RANSAC is randomized and
+  multithreaded. Two runs of `ours` differed in 1,028 of 1.53 M scores, by a
+  few points each, with the same summary. A rerun of `sigfm` reproduced its
+  summary exactly.
 
 ## Disclosure
 
