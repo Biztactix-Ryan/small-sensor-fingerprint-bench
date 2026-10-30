@@ -29,7 +29,7 @@ import sys
 import time
 import zlib
 from collections import defaultdict
-from multiprocessing import Pool
+import multiprocessing
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cv2  # noqa: E402
@@ -44,7 +44,10 @@ WORKERS = max(1, (os.cpu_count() or 2) - 2)
 
 
 def pool():
-    return Pool(WORKERS, initializer=os.nice, initargs=(10,))
+    # workers use the matcher and templates set up in main(): they must be
+    # forked (Python 3.14 defaults to forkserver on Linux)
+    ctx = multiprocessing.get_context("fork")
+    return ctx.Pool(WORKERS, initializer=os.nice, initargs=(10,))
 
 
 def progress_map(p, fn, jobs, label, chunksize):
