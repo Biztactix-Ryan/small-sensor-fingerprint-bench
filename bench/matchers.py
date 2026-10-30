@@ -49,6 +49,27 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 _clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4, 4))
 _sift = cv2.SIFT_create()
 _bf = cv2.BFMatcher()
+
+# The C implementation of the deterministic matcher (fpi-keypoint-match.c of
+# our libfprint branch, built as a shared library), if FPBENCH_KPM_LIB names
+# it or it is at kpm/libkpm.so: same scores as the Python code below, much
+# faster.
+_kpm = None
+
+
+class _Keypoints(ctypes.Structure):
+    _fields_ = [("n", ctypes.c_uint), ("points", ctypes.c_void_p), ("descriptors", ctypes.c_void_p)]
+
+
+def _kpm_lib():
+    global _kpm
+    path = os.environ.get("FPBENCH_KPM_LIB", os.path.join(HERE, "..", "kpm", "libkpm.so"))
+    if _kpm is None and os.path.exists(path):
+        _kpm = ctypes.CDLL(path)
+        _kpm.fpi_keypoint_match_score.restype = ctypes.c_uint
+        _kpm.fpi_keypoint_match_score.argtypes = (ctypes.POINTER(_Keypoints), ctypes.POINTER(_Keypoints),
+                                                  ctypes.c_double, ctypes.c_int, ctypes.c_void_p)
+    return _kpm
 _bf_hamming = cv2.BFMatcher(cv2.NORM_HAMMING)
 
 # binary detectors, set up for 96x96 frames (192x192 with preprocessing): the
@@ -94,6 +115,9 @@ class Ransac:
         return np.float32([k.pt for k in kp]), des
 
     def load(self, f):
+        if self.det and f[1] is not None:
+            # the C matcher's layout: float32 points, byte descriptors
+            return np.ascontiguousarray(f[0], np.float32), np.ascontiguousarray(f[1], np.uint8)
         return f
 
     def matches(self, a, b):
@@ -118,6 +142,8 @@ class Ransac:
 
     def inliers(self, a, b):
         """Indices of the probe keypoints consistent with the best transform."""
+        if self.det and _kpm_lib():
+            return self._c_inliers(a, b)
         m = self.matches(a, b)
         if m is None:
             return ()
@@ -133,6 +159,16 @@ class Ransac:
         if not 0.85 < s < 1.15:
             return ()
         return qi[inl.ravel() > 0]
+
+    def _c_inliers(self, a, b):
+        if a[1] is None or b[1] is None:
+            return ()
+        ka, kb = [_Keypoints(len(p), p.ctypes.data, d.ctypes.data) for p, d in (a, b)]
+        out = np.zeros(len(a[0]), np.uint32)
+        flags = (1 if self.mutual else 0) | (2 if self.limit_angle else 0)
+        n = _kpm.fpi_keypoint_match_score(ctypes.byref(ka), ctypes.byref(kb), self.ransac_px, flags,
+                                          out.ctypes.data)
+        return out[:n] if n else ()
 
     def score(self, a, b):
         return len(self.inliers(a, b))
