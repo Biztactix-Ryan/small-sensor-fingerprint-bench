@@ -23,6 +23,10 @@ union: ArcticLampyrid's overlap score proposed on !530: the union of the
     probe keypoints that are inliers against any enrolled image, x10000 over
     max(probe keypoints, mean keypoints of the enrolled images). Inliers from
     ours_det.
+vlsift / ftsift: ours_det with SIFT from a C implementation instead of
+    OpenCV's, built by csift/build.sh: VLFeat's (BSD), or the one in the
+    FocalTech FT9366 driver of a libfprint fork (LGPL). Without OpenCV in
+    the matcher itself; upscale + CLAHE still come from OpenCV here.
 orb / akaze / brisk (+ _raw): the same matcher with binary keypoints and
     descriptors (Hamming distance) instead of SIFT, to see what a matcher
     without SIFT, e.g. one in plain C, would cost.
@@ -131,6 +135,26 @@ class Ransac:
         return len(self.inliers(a, b))
 
 
+class CSift(Ransac):
+    def __init__(self, lib):
+        super().__init__(pre=True, det=True)
+        self.libname = lib
+        self._lib = None
+
+    def features_img(self, img):
+        if self._lib is None:
+            self._lib = ctypes.CDLL(os.path.join(HERE, "..", "csift", "build", self.libname))
+            self._lib.csift_extract.restype = ctypes.c_int
+        img = np.ascontiguousarray(_preprocess(img), dtype=np.uint8)
+        xy = np.zeros((2048, 2), np.float32)
+        des = np.zeros((2048, 128), np.float32)
+        n = self._lib.csift_extract(img.ctypes.data, img.shape[1], img.shape[0], len(xy),
+                                    xy.ctypes.data, des.ctypes.data)
+        if n < 0:
+            raise ValueError(f"{self.libname}: unsupported image size {img.shape}")
+        return xy[:n].copy(), (des[:n].copy() if n else None)
+
+
 class Union(Ransac):
     thresholds = (500, 750, 900, 1000, 1200, 1500, 2000)
     default = 1000
@@ -230,6 +254,8 @@ MATCHERS = {
     "ours_det": lambda: Ransac(pre=True, det=True),
     "ours_strict": lambda: Ransac(pre=True, det=True, mutual=True, max_rot=45),
     "union": Union,
+    "vlsift": lambda: CSift("libvlsift.so"),
+    "ftsift": lambda: CSift("libftsift.so"),
     **{f"{d}{suffix}": (lambda d=d, pre=pre: Ransac(pre, d))
        for d in _DETECTORS for suffix, pre in (("", True), ("_raw", False))},
     "sigfm": lambda: Sigfm("libsigfm.so", pre=False),
