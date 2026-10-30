@@ -16,7 +16,10 @@ ours / ours_raw: a SIFT + RANSAC matcher (rigid transform, score = inliers),
     stored as bytes like its C implementation, which gives identical scores.
 ours_det: ours with a deterministic estimator instead of OpenCV's RANSAC:
     every two-point similarity from the 50 best matches, scored against all
-    matches; the one with most inliers wins (bit-reproducible, easy in C).
+    matches; the one with most inliers wins. Matching is defined exactly
+    (integer descriptor distances, fixed order of floating point operations)
+    and reproduced bit for bit by fpi-keypoint-match.c in our libfprint
+    branch.
 ours_strict: ours_det, plus mutual nearest neighbours only and rotation
     limited to 45 degrees.
 union: ArcticLampyrid's overlap score proposed on !530: the union of the
@@ -67,13 +70,13 @@ class Ransac:
     thresholds = (6, 8, 10, 12, 14, 16, 20)
     default = 10
 
-    def __init__(self, pre, detector=None, det=False, mutual=False, max_rot=None):
+    def __init__(self, pre, detector=None, det=False, mutual=False, limit_angle=False):
         self.pre = pre
         self.ransac_px = 3.0 * (2 if pre else 1)
         self.detector = detector
         self.det = det
         self.mutual = mutual
-        self.max_rot = max_rot
+        self.limit_angle = limit_angle
         self._det = None
 
     def features_img(self, img):
@@ -100,6 +103,8 @@ class Ransac:
         pb, db = b
         if da is None or db is None or len(da) < 2 or len(db) < 2:
             return None
+        if self.det:
+            return _exact_matches(pa, da, pb, db, self.mutual)
         bf = _bf_hamming if self.detector else _bf
         good = [m[0] for m in bf.knnMatch(da, db, k=2)
                 if len(m) == 2 and m[0].distance < 0.75 * m[1].distance]
@@ -108,8 +113,6 @@ class Ransac:
             good = [m for m in good if back.get(m.trainIdx) == m.queryIdx]
         if len(good) < 3:
             return None
-        if self.det:
-            good.sort(key=lambda m: m.distance)
         return (np.int32([m.queryIdx for m in good]),
                 pa[[m.queryIdx for m in good]], pb[[m.trainIdx for m in good]])
 
@@ -120,7 +123,7 @@ class Ransac:
             return ()
         qi, src, dst = m
         if self.det:
-            mask = _similarity_inliers(src, dst, self.ransac_px, self.max_rot)
+            mask = _similarity_inliers(src, dst, self.ransac_px, self.limit_angle)
             return qi[mask] if mask is not None else ()
         M, inl = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
                                              ransacReprojThreshold=self.ransac_px)
@@ -154,7 +157,9 @@ class CSift(Ransac):
                                     xy.ctypes.data, des.ctypes.data)
         if n < 0:
             raise ValueError(f"{self.libname}: unsupported image size {img.shape}")
-        return xy[:n].copy(), (des[:n].copy() if n else None)
+        # bytes, like stored SIFT descriptors (OpenCV's are scaled the same way)
+        des = np.minimum(np.rint(des[:n] * 512), 255).astype(np.uint8)
+        return xy[:n].copy(), (des if n else None)
 
 
 class Union(Ransac):
@@ -174,28 +179,58 @@ class Union(Ransac):
         return len(union) * 10000 // max(len(probe[0]), mean, 1)
 
 
-def _similarity_inliers(src, dst, px, max_rot, n_best=50):
-    """Inlier mask of the similarity transform (scale 0.85-1.15, rotation within
-    max_rot degrees) with most inliers, among those through every pair of the
-    n_best first matches. Ties go to the first pair, so the result is
-    deterministic."""
-    k = min(len(src), n_best)
+def _exact_matches(pa, da, pb, db, mutual):
+    """Ratio-test matches on exact integer squared descriptor distances, as
+    (probe indices, probe points, gallery points) sorted by distance, then
+    probe index. Ties between equally near descriptors go to the lower
+    index."""
+    A, B = da.astype(np.int64), db.astype(np.int64)
+    D = (A * A).sum(1)[:, None] + (B * B).sum(1)[None, :] - 2 * A @ B.T
+    q = np.arange(len(A))
+    g = D.argmin(1)
+    d1 = D[q, g]
+    D2 = D.copy()
+    D2[q, g] = np.iinfo(np.int64).max
+    d2 = D2.min(1)
+    ok = 16 * d1 < 9 * d2
+    if mutual:
+        ok &= D.argmin(0)[g] == q
+    q, g, d1 = q[ok], g[ok], d1[ok]
+    if len(q) < 3:
+        return None
+    order = np.lexsort((q, d1))
+    q, g = q[order], g[order]
+    return np.int32(q), pa[q], pb[g]
+
+
+def _similarity_inliers(src, dst, px, limit_angle, n_best=50):
+    """Inlier mask of the transform (rotation, translation, scale 0.85-1.15,
+    optionally rotation within 45 degrees) with most inliers, among those
+    through every pair of the n_best first matches; the first maximum wins.
+    Same operations in the same order as fpi_keypoint_match_score()."""
+    sx, sy = np.float64(src[:, 0]), np.float64(src[:, 1])
+    dx, dy = np.float64(dst[:, 0]), np.float64(dst[:, 1])
+    k = min(len(sx), n_best)
     i, j = np.triu_indices(k, 1)
-    S = src[:, 0] + 1j * src[:, 1]
-    D = dst[:, 0] + 1j * dst[:, 1]
-    ds, dd = S[j] - S[i], D[j] - D[i]
-    ok = np.abs(ds) > 1e-6
-    i, j, ds, dd = i[ok], j[ok], ds[ok], dd[ok]
-    a = dd / ds
-    ok = (np.abs(a) > 0.85) & (np.abs(a) < 1.15)
-    if max_rot is not None:
-        ok &= np.abs(np.angle(a, deg=True)) <= max_rot
+    dsx, dsy = sx[j] - sx[i], sy[j] - sy[i]
+    ddx, ddy = dx[j] - dx[i], dy[j] - dy[i]
+    n2 = dsx * dsx + dsy * dsy
+    ok = n2 > 1e-12
+    n2 = np.where(ok, n2, 1.0)
+    ar = (ddx * dsx + ddy * dsy) / n2
+    ai = (ddy * dsx - ddx * dsy) / n2
+    s2 = ar * ar + ai * ai
+    ok &= (s2 > 0.85 * 0.85) & (s2 < 1.15 * 1.15)
+    if limit_angle:
+        ok &= (ar > 0) & (ai * ai <= ar * ar)
     if not ok.any():
         return None
-    a, i = a[ok], i[ok]
-    t = D[i] - a * S[i]
-    err = np.abs(a[:, None] * S[None, :] + t[:, None] - D[None, :])
-    within = err < px
+    ar, ai, i = ar[ok], ai[ok], i[ok]
+    tx = dx[i] - (ar * sx[i] - ai * sy[i])
+    ty = dy[i] - (ai * sx[i] + ar * sy[i])
+    ex = ar[:, None] * sx[None, :] - ai[:, None] * sy[None, :] + tx[:, None] - dx[None, :]
+    ey = ai[:, None] * sx[None, :] + ar[:, None] * sy[None, :] + ty[:, None] - dy[None, :]
+    within = ex * ex + ey * ey < px * px
     return within[int(np.argmax(within.sum(1)))]
 
 
@@ -254,7 +289,7 @@ MATCHERS = {
     "ours": lambda: Ransac(pre=True),
     "ours_raw": lambda: Ransac(pre=False),
     "ours_det": lambda: Ransac(pre=True, det=True),
-    "ours_strict": lambda: Ransac(pre=True, det=True, mutual=True, max_rot=45),
+    "ours_strict": lambda: Ransac(pre=True, det=True, mutual=True, limit_angle=True),
     "union": Union,
     "vlsift": lambda: CSift("libvlsift.so"),
     "ftsift": lambda: CSift("libftsift.so"),
