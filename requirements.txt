@@ -1,0 +1,6 @@
+# Python side (or the distribution packages, e.g. Debian/Ubuntu python3-opencv
+# python3-numpy). OpenCV >= 4.4 for SIFT in the main module.
+numpy>=1.21
+opencv-python>=4.4
+# C++ side, for sigfm/build.sh: g++, pkg-config and the OpenCV development
+# files (Debian/Ubuntu: libopencv-dev), and git for sigfm/fetch.sh

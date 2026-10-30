@@ -1,0 +1,54 @@
+--- a/sigfm.cpp
++++ b/sigfm.cpp
+@@ -52,6 +52,7 @@
+ constexpr auto length_match = 0.05;
+ constexpr auto angle_match = 0.05;
+ constexpr auto min_match = 5;
++constexpr std::size_t max_matches = 176;
+ struct match {
+     cv::Point2i p1;
+     cv::Point2i p2;
+@@ -63,8 +64,8 @@
+     }
+     bool operator<(const match& right) const
+     {
+-        return (this->p1.y < right.p1.y) ||
+-               ((this->p1.y < right.p1.y) && this->p1.x < right.p1.x);
++        return std::tie(this->p1.y, this->p1.x, this->p2.y, this->p2.x) <
++               std::tie(right.p1.y, right.p1.x, right.p2.y, right.p2.x);
+     }
+ };
+ struct angle {
+@@ -125,6 +126,7 @@
+         auto bfm = cv::BFMatcher::create();
+         bfm->knnMatch(frame->descriptors, enrolled->descriptors, points, 2);
+         std::set<match> matches_unique;
++        std::vector<std::pair<float, match>> ranked;
+         int nb_matched = 0;
+         for (const auto& pts : points) {
+             if (pts.size() < 2) {
+@@ -132,7 +134,7 @@
+             }
+             const cv::DMatch& match_1 = pts.at(0);
+             if (match_1.distance < distance_match * pts.at(1).distance) {
+-                matches_unique.emplace(
++                ranked.emplace_back(match_1.distance,
+                     match{frame->keypoints.at(match_1.queryIdx).pt,
+                           enrolled->keypoints.at(match_1.trainIdx).pt});
+                 nb_matched++;
+@@ -141,6 +143,15 @@
+         if (nb_matched < min_match) {
+             return 0;
+         }
++        /* fixed ordering + cap as proposed by Sergey Subbotin on !530:
++         * keep the max_matches best matches by descriptor distance */
++        std::stable_sort(ranked.begin(), ranked.end(),
++                         [](const auto& a, const auto& b) { return a.first < b.first; });
++        for (const auto& r : ranked) {
++            if (matches_unique.size() >= max_matches)
++                break;
++            matches_unique.insert(r.second);
++        }
+         std::vector<match> matches{matches_unique.begin(),
+                                    matches_unique.end()};
+ 

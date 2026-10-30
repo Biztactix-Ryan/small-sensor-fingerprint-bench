@@ -1,0 +1,7 @@
+# datasets are never committed, see docs/DATASETS.md
+data/
+# fetched/built SIGFM, see sigfm/build.sh
+sigfm/src/
+sigfm/build/
+__pycache__/
+*.pyc
