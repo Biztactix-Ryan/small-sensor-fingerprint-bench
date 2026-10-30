@@ -145,6 +145,8 @@ class CSift(Ransac):
         if self._lib is None:
             self._lib = ctypes.CDLL(os.path.join(HERE, "..", "csift", "build", self.libname))
             self._lib.csift_extract.restype = ctypes.c_int
+            self._lib.csift_extract.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                                ctypes.c_void_p, ctypes.c_void_p)
         img = np.ascontiguousarray(_preprocess(img), dtype=np.uint8)
         xy = np.zeros((2048, 2), np.float32)
         des = np.zeros((2048, 128), np.float32)
