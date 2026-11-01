@@ -4,14 +4,14 @@
 |---|---|---|---|---|---|---|---|---|---|---|
 | akaze | unsw2d_v3b | 1452 | 8321477 | 12 | 13 | 6.9% | 8.8% | 10 | 1 | 4.8% |
 | ours | unsw2d_v3 | 1452 | 8347595 | 9 | 10 | 6.8% | 8.9% | 10 | 0 | 6.8% |
-| sigfm_fix | unsw2d_v3b | 1452 | 8321477 | 133 | 134 | 6.2% | 8.2% | 24 | 236 | 3.6% |
-| sigfm | unsw2d_v3b | 1452 | 8321477 | 100 | 101 | 6.2% | 8.3% | 24 | 72 | 3.9% |
+| sigfm_fix | unsw2d_v3b | 1452 | 8321477 | 148 | 149 | 6.1% | 8.2% | 24 | 271 | 3.6% |
+| sigfm | unsw2d_v3b | 1452 | 8321477 | 122 | 123 | 6.4% | 8.5% | 24 | 88 | 3.9% |
 
 ### FRR of registered genuine attempts per set, at each matcher's zero-FA threshold
 
 | set | n | akaze unsw2d_v3b | ours unsw2d_v3 | sigfm_fix unsw2d_v3b | sigfm unsw2d_v3b |
 |---|---|---|---|---|---|
-| unsw2d | 5585 | 6.9% | 6.8% | 6.2% | 6.2% |
+| unsw2d | 5585 | 6.9% | 6.8% | 6.1% | 6.4% |
 
 ### Uncertainty, fixed false-accept rate and per-set average
 
@@ -21,8 +21,8 @@ Bootstrap over fingers (200 resamples, 5th-95th percentile). FA <= k: k = 1e-5 x
 |---|---|---|---|---|---|---|---|
 | akaze | unsw2d_v3b | 13 (9-13) | 6.9% (3.9-7.3%) | 8 (k=83) | 3.8% | 6.9% (1 sets) | 21158 |
 | ours | unsw2d_v3 | 10 (9-10) | 6.8% (5.1-7.3%) | 8 (k=83) | 5.1% | 6.8% (1 sets) | - |
-| sigfm_fix | unsw2d_v3b | 134 (84-134) | 6.2% (4.6-6.6%) | 34 (k=83) | 3.9% | 6.2% (1 sets) | 141554 |
-| sigfm | unsw2d_v3b | 101 (53-101) | 6.2% (4.5-6.7%) | 23 (k=83) | 3.9% | 6.2% (1 sets) | 141554 |
+| sigfm_fix | unsw2d_v3b | 149 (71-149) | 6.1% (4.6-6.6%) | 35 (k=83) | 4.1% | 6.1% (1 sets) | 141554 |
+| sigfm | unsw2d_v3b | 123 (47-123) | 6.4% (4.2-6.7%) | 25 (k=83) | 4.0% | 6.4% (1 sets) | 141554 |
 
 ### FRR by overlap with the enrolled area
 
@@ -32,5 +32,5 @@ Registered genuine attempts at each matcher's zero-FA threshold, by the share of
 |---|---|---|---|---|---|
 | akaze | unsw2d_v3b | 68.8% (n=16) | 17.4% (n=288) | 10.1% (n=883) | 5.3% (n=4380) |
 | ours | unsw2d_v3 | 50.0% (n=16) | 14.0% (n=286) | 9.7% (n=888) | 5.6% (n=4395) |
-| sigfm_fix | unsw2d_v3b | 56.2% (n=16) | 15.6% (n=288) | 10.0% (n=883) | 4.6% (n=4380) |
-| sigfm | unsw2d_v3b | 50.0% (n=16) | 15.6% (n=288) | 10.5% (n=883) | 4.6% (n=4380) |
+| sigfm_fix | unsw2d_v3b | 43.8% (n=16) | 15.3% (n=288) | 9.1% (n=883) | 4.8% (n=4380) |
+| sigfm | unsw2d_v3b | 43.8% (n=16) | 15.6% (n=288) | 9.6% (n=883) | 5.0% (n=4380) |

@@ -47,9 +47,16 @@ SETS = {
     # NIST SD 302: plain impressions of 2000 fingers at 500 ppi from up to 3
     # of 4 auxiliary devices (302d), a segmented slap (302b) and, except
     # thumbs, fingers segmented from palm captures (302c); genuine attempts
-    # are across devices
+    # are across devices. Device L is left out: its images don't register
+    # to any other device's, whole-image, under any flip, polarity or scale
+    # (1 of 110 sampled)
     "nist302_plain": (500, False),
 }
+
+# NIST SD 302 devices, best first: the first impression of a finger is the
+# enrollment reference the others are registered to. Palm-segmented J
+# images are sometimes nearly blank, so J comes last.
+NIST302_DEVICES = "MKSRPNQJ"
 
 # The 500 dpi reference for measuring a sensor's resolution (main()). Fixed,
 # because ridge spacing differs between populations: adding sets would
@@ -117,13 +124,14 @@ def index():
                                             "*.png"))
             for p in paths:
                 m = re.fullmatch(r"(\d+)_([A-Z])_500_(?:plain|slap|palm)_(\d+)\.png", os.path.basename(p))
-                if not m:
+                if not m or m[2] not in NIST302_DEVICES:
                     continue
                 frgp = int(m[3])
                 # errata: thumbs swapped for these subjects on these devices
                 if (m[1], m[2]) in NIST302_THUMBS_SWAPPED and frgp in (1, 6):
                     frgp = 7 - frgp
-                out.append((name, f"{name}/{m[1]}_{frgp:02d}", m[2], p))
+                # impressions sort in device order
+                out.append((name, f"{name}/{m[1]}_{frgp:02d}", f"{NIST302_DEVICES.index(m[2])}{m[2]}", p))
             continue
         if name == "polyu_cross":
             # sessions 2-24 months apart; impressions keyed so that session 1
@@ -179,6 +187,57 @@ def identity(finger_id):
     # UNSW 2D: fingers 8 and 9 of subject 138 match each other with SIGFM
     # scores in the millions, i.e. the same finger under two labels
     return "unsw2d/138_8" if finger_id == "unsw2d/138_9" else finger_id
+
+
+# docs/FINAL_RUN.md "Data and splits": thresholds are chosen on dev only,
+# safety is reported on test. Every other set (and own captures) is dev.
+TEST_SETS = {"nist302_plain", "polyu_cross", "socofing", "family"}
+
+
+def split(finger_id):
+    """'dev' or 'test' for a finger id (or a bare set name)."""
+    return "test" if finger_id.split("/")[0] in TEST_SETS else "dev"
+
+
+# person id from file names, for same-person-other-finger impostors:
+# neuro (<person>_<finger>_<scan>, per readme.txt; same people on both
+# sensors), UNSW 2D (<subject>_<finger>), NIST SD 302 (<subject>_<frgp>),
+# MINEX (<subject>_<position>: 50 numbers x 8 finger positions, positions
+# from minexiii_validation_data.h), SOCOFing (<subject>__<sex>_<hand>_...),
+# Family (FM<family>_<role><finger>). FVC, FVS, Tsinghua and PolyU (one
+# number per "client/finger") don't record the person.
+_PERSON = [
+    (r"neuro_(?:crossmatch|uareu)/(\d+)_\d+", "neuro/{}"),
+    (r"unsw2d/(\d+)_\d+", "unsw2d/{}"),
+    (r"nist302_plain/(\d+)_\d+", "nist302_plain/{}"),
+    (r"minex/(\d+)_\d+", "minex/{}"),
+    (r"socofing/(\d+)__.*", "socofing/{}"),
+    (r"family/(FM\d+_[FMC])\d+", "family/{}"),
+]
+
+
+def person(finger_id):
+    """Person a finger belongs to, '' where the set doesn't say."""
+    for pat, fmt in _PERSON:
+        m = re.fullmatch(pat, finger_id)
+        if m:
+            return fmt.format(m[1])
+    return ""
+
+
+def kin(finger_id):
+    """(family, role, finger) of a Family finger, role F, M or C (father,
+    mother, child); None for every other set."""
+    m = re.fullmatch(r"family/(FM\d+)_([FMC])(\d+)", finger_id)
+    return (m[1], m[2], int(m[3])) if m else None
+
+
+def kin_pairs(finger_ids):
+    """[(child, parent)] index pairs into @finger_ids: the same finger of a
+    child and of its father or mother."""
+    at = {kin(f): i for i, f in enumerate(finger_ids) if kin(f)}
+    return sorted((i, at[(fam, p, k)]) for (fam, r, k), i in at.items() if r == "C"
+                  for p in "FM" if (fam, p, k) in at)
 
 
 def ridge_period(img):

@@ -4,7 +4,8 @@
  *   int csift_extract (const uint8_t *img, int w, int h, int max,
  *                      float *xy, float *desc)
  * returns the number of keypoints (<= max), their positions in xy (x, y
- * pairs) and 128-float descriptors in desc.
+ * pairs) and 128-float descriptors in desc. VLFeat's are the first max
+ * found, FT9366's the max of highest contrast (in the order found).
  */
 #include <stdint.h>
 #include <string.h>
@@ -62,7 +63,8 @@ csift_extract (const uint8_t *img, int w, int h, int max, float *xy, float *desc
   /* 255 marks pixels the finger doesn't touch */
   for (int i = 0; i < w * h; i++)
     im[i] = img[i] == FT9366_PX_NONE ? FT9366_PX_NONE - 1 : img[i];
-  g_autoptr(Ft9366Features) f = ft9366_features_new (im);
+  /* the max strongest, see ft9366-topn.patch */
+  g_autoptr(Ft9366Features) f = ft9366_features_new_max (im, max);
   for (guint i = 0; i < f->n && n < max; i++, n++)
     {
       xy[2 * n] = f->kp[i].x;

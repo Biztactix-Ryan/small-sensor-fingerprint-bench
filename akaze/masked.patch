@@ -1,0 +1,1153 @@
+Border-aware (masked) AKAZE descriptors: the variant of docs/FINAL_RUN.md
+item 0c that was evaluated against the 20 px replicate pad and not kept
+(owner kept pad 20, 2026-11-02). Kept here so the 0c numbers can be
+reproduced; it is not on the libfprint sift-matcher branch.
+
+Adds to libfprint (fpi-keypoint-akaze.[ch], fpi-keypoint-match.[ch]):
+fpi_akaze_detect_full(), fpi_akaze_extract_masked(),
+fpi_akaze_match_score_masked(), fpi_keypoint_match_score_masked(),
+FPI_AKAZE_DESCRIPTOR_BITS / _MIN_VALID_BITS / _MASKED_BORDER, the masks
+and valid_bits fields of FpiAkazeFeatures, and the tests
+/keypoint/akaze-masked, /keypoint/masked-distance, /keypoint/masked-score.
+The default (padded) path is unchanged: the same scores with or without it.
+
+Apply it to a copy of a sift-matcher tree whose AKAZE files carry no masked
+code, rebuild the bench library from that copy, and run with the masked
+knobs:
+
+  cp -a ~/Repo/FingerPrintReader/libfprint-upstream ~/lf-masked
+  patch -d ~/lf-masked -p1 < akaze/masked.patch
+  (cd ~/lf-masked && meson setup _b && ninja -C _b && meson test -C _b)
+  LIBFPRINT=~/lf-masked akaze/build.sh lib
+  # best masked row of 0c: floor first, border 2, floor 243
+  FPBENCH_AKAZE_MASK=1 FPBENCH_AKAZE_BORDER=2 FPBENCH_AKAZE_MIN_BITS=243 \
+  FPBENCH_AKAZE_FLOOR_FIRST=1 PYTHONNOUSERSITE=1 python3 bench/big_eval.py \
+    --matcher akaze_c --data <datasets> --out <dir>
+
+Other 0c rows: drop FPBENCH_AKAZE_FLOOR_FIRST, or vary FPBENCH_AKAZE_BORDER
+(1-3) and FPBENCH_AKAZE_MIN_BITS (120-405). Without the patch the masked
+knobs stop with an error naming this file. akaze/build.sh lib rebuilds
+libakaze_c.so in place: run it again on the unpatched tree afterwards to
+get the default library back. (git apply works as well as patch -p1.)
+
+--- a/libfprint/fpi-keypoint-akaze.h
++++ b/libfprint/fpi-keypoint-akaze.h
+@@ -92,8 +92,24 @@
+ GArray *fpi_akaze_detect (const FpiAkazeScaleSpace *ss,
+                           gfloat                    threshold);
+ 
++GArray *fpi_akaze_detect_full (const FpiAkazeScaleSpace *ss,
++                               gfloat                    threshold,
++                               gint                      border);
++
+ /* full rotation invariant MLDB: 486 bits, the last 2 of byte 60 zero */
+ #define FPI_AKAZE_DESCRIPTOR_LEN 61
++#define FPI_AKAZE_DESCRIPTOR_BITS 486
++
++/* masked matching: pairs with fewer bits valid in both are no candidates.
++ * a third of the bits: the share of differing bits of unrelated
++ * descriptors then still has a standard deviation under 4% (sqrt (1/4 c)
++ * at c = 162, vs 2.3% with all 486), and over three quarters of public
++ * patch keypoints have more valid bits (border 2) */
++#define FPI_AKAZE_MIN_VALID_BITS (FPI_AKAZE_DESCRIPTOR_BITS / 3)
++
++/* fpi_akaze_extract_masked() detection border, in sigma_size: the support
++ * of the second derivatives the detector response is made of */
++#define FPI_AKAZE_MASKED_BORDER 2
+ 
+ /* keypoints kept per image, the strongest: at 3x with the pad every real
+  * 96x96 frame has more (median ~900), so this is the usual count */
+@@ -113,6 +129,10 @@
+   FpiKeypoint      *points;
+   /* n * FPI_AKAZE_DESCRIPTOR_LEN bytes, compared with FPI_KEYPOINT_HAMMING */
+   guint8           *descriptors;
++  /* masked extraction only, else NULL: a bit set per valid descriptor bit */
++  guint8           *masks;
++  /* and the number of valid bits of each keypoint */
++  guint16          *valid_bits;
+ } FpiAkazeFeatures;
+ 
+ FpiAkazeFeatures *fpi_akaze_extract (const guint8 *image,
+@@ -129,6 +149,13 @@
+                                           gfloat        threshold,
+                                           guint         max_keypoints);
+ 
++FpiAkazeFeatures *fpi_akaze_extract_masked (const guint8 *image,
++                                            gint          width,
++                                            gint          height,
++                                            gint          border,
++                                            gfloat        threshold,
++                                            guint         max_keypoints);
++
+ FpiAkazeFeatures *fpi_akaze_extract_image (const guint8 *image,
+                                            gint          width,
+                                            gint          height);
+@@ -141,4 +168,11 @@
+                              const FpiKeypoints *gallery,
+                              guint              *inliers);
+ 
++guint fpi_akaze_match_score_masked (const FpiKeypoints *probe,
++                                    const guint8       *probe_masks,
++                                    const FpiKeypoints *gallery,
++                                    const guint8       *gallery_masks,
++                                    guint               min_valid_bits,
++                                    guint              *inliers);
++
+ G_END_DECLS
+--- a/libfprint/fpi-keypoint-akaze.c
++++ b/libfprint/fpi-keypoint-akaze.c
+@@ -784,23 +784,25 @@
+   return -1;
+ }
+ 
+-/* local maxima of one level above threshold, one per search radius */
++/* local maxima of one level above threshold, one per search radius, at
++ * least border pixels from the edge */
+ static void
+-find_same_scale (const FpiAkazeLevel *l, gfloat threshold, guint8 *mask)
++find_same_scale (const FpiAkazeLevel *l, gfloat threshold, gint border,
++                 guint8 *mask)
+ {
+   const gint w = l->width, h = l->height, r = l->sigma_size;
+   const gfloat *ldet = l->ldet;
+ 
+-  if (l->border + 1 >= h)
++  if (border + 1 >= h)
+     return;
+ 
+-  for (gint y = l->border; y < h - l->border; y++)
++  for (gint y = border; y < h - border; y++)
+     {
+       const gfloat *prev = ldet + (y - 1) * w;
+       const gfloat *curr = ldet + y * w;
+       const gfloat *next = ldet + (y + 1) * w;
+ 
+-      for (gint x = l->border; x < w - l->border; x++)
++      for (gint x = border; x < w - border; x++)
+         {
+           const gfloat value = curr[x];
+           gint idx;
+@@ -830,10 +832,11 @@
+ 
+ /* Find_Scale_Space_Extrema: per level maxima, pruned against neighbour levels */
+ static void
+-find_extrema (const FpiAkazeScaleSpace *ss, gfloat threshold, guint8 **masks)
++find_extrema (const FpiAkazeScaleSpace *ss, gfloat threshold,
++              const gint *borders, guint8 **masks)
+ {
+   for (gint i = 0; i < ss->n_levels; i++)
+-    find_same_scale (&ss->levels[i], threshold, masks[i]);
++    find_same_scale (&ss->levels[i], threshold, borders[i], masks[i]);
+ 
+   /* against the level below */
+   for (gint i = 1; i < ss->n_levels; i++)
+@@ -991,10 +994,12 @@
+ /*
+  * Compute_Main_Orientation: gaussian weighted derivatives in a circle of
+  * radius 6 scale, summed in a sliding pi / 3 window of angle slices; the
+- * angle of the largest sum
++ * angle of the largest sum. Unless masked the circle must fit in the level;
++ * if masked, samples outside it are left out
+  */
+ static void
+-main_orientation (const FpiAkazeScaleSpace *ss, FpiAkazeKeypoint *kp)
++main_orientation (const FpiAkazeScaleSpace *ss, FpiAkazeKeypoint *kp,
++                  gboolean masked)
+ {
+   static gint xidx[ORI_SAMPLES], yidx[ORI_SAMPLES];
+   static gfloat weight[ORI_SAMPLES];
+@@ -1004,7 +1009,7 @@
+   gfloat res_x[ORI_SAMPLES], res_y[ORI_SAMPLES], ang[ORI_SAMPLES];
+   gint slice[ORI_SLICES + 1], sorted[ORI_SAMPLES];
+   gfloat max_x = 0.f, max_y = 0.f, max_norm;
+-  gint scale, x0, y0;
++  gint scale, x0, y0, n = 0;
+ 
+   if (g_once_init_enter (&table_init))
+     {
+@@ -1027,19 +1032,27 @@
+   x0 = round_int (kp->x / l->octave_ratio);
+   y0 = round_int (kp->y / l->octave_ratio);
+ 
+-  g_return_if_fail (x0 - 6 * scale >= 0 && x0 + 6 * scale < l->width);
+-  g_return_if_fail (y0 - 6 * scale >= 0 && y0 + 6 * scale < l->height);
++  if (!masked)
++    {
++      g_return_if_fail (x0 - 6 * scale >= 0 && x0 + 6 * scale < l->width);
++      g_return_if_fail (y0 - 6 * scale >= 0 && y0 + 6 * scale < l->height);
++    }
+ 
+   for (gint i = 0; i < ORI_SAMPLES; i++)
+     {
+-      gint p = (y0 + yidx[i] * scale) * l->width + x0 + xidx[i] * scale;
++      gint sx = x0 + xidx[i] * scale, sy = y0 + yidx[i] * scale, p;
++
++      if (sx < 0 || sx >= l->width || sy < 0 || sy >= l->height)
++        continue;
+ 
+-      res_x[i] = weight[i] * l->lx[p];
+-      res_y[i] = weight[i] * l->ly[p];
+-      ang[i] = fast_atan2_rad (res_y[i], res_x[i]);
++      p = sy * l->width + sx;
++      res_x[n] = weight[i] * l->lx[p];
++      res_y[n] = weight[i] * l->ly[p];
++      ang[n] = fast_atan2_rad (res_y[n], res_x[n]);
++      n++;
+     }
+ 
+-  quantized_counting_sort (ang, ORI_SAMPLES, ang_step, ORI_SLICES, sorted, slice);
++  quantized_counting_sort (ang, n, ang_step, ORI_SLICES, sorted, slice);
+ 
+   for (gint i = slice[0]; i < slice[ORI_WIN]; i++)
+     {
+@@ -1115,17 +1128,41 @@
+ GArray *
+ fpi_akaze_detect (const FpiAkazeScaleSpace *ss, gfloat threshold)
+ {
++  return fpi_akaze_detect_full (ss, threshold, -1);
++}
++
++/**
++ * fpi_akaze_detect_full:
++ * @ss: the scale space
++ * @threshold: as for fpi_akaze_detect()
++ * @border: keypoints lie at least @border times the level's sigma_size
++ *   pixels (and at least 1) from the edge of their level, with an
++ *   orientation from the samples inside it; negative for fpi_akaze_detect(),
++ *   whose descriptors must fit (FpiAkazeLevel.border)
++ *
++ * Returns: (transfer full) (element-type FpiAkazeKeypoint): the keypoints
++ */
++GArray *
++fpi_akaze_detect_full (const FpiAkazeScaleSpace *ss, gfloat threshold,
++                       gint border)
++{
+   GArray *kpts = g_array_new (FALSE, FALSE, sizeof (FpiAkazeKeypoint));
+   guint8 *masks[FPI_AKAZE_MAX_LEVELS];
++  gint borders[FPI_AKAZE_MAX_LEVELS];
+ 
+   for (gint i = 0; i < ss->n_levels; i++)
+-    masks[i] = g_malloc0 (ss->levels[i].width * ss->levels[i].height);
++    {
++      const FpiAkazeLevel *l = &ss->levels[i];
++
++      masks[i] = g_malloc0 (l->width * l->height);
++      borders[i] = border < 0 ? l->border : MAX (border * l->sigma_size, 1);
++    }
+ 
+-  find_extrema (ss, threshold, masks);
++  find_extrema (ss, threshold, borders, masks);
+   refine_keypoints (ss, masks, kpts);
+ 
+   for (guint i = 0; i < kpts->len; i++)
+-    main_orientation (ss, &g_array_index (kpts, FpiAkazeKeypoint, i));
++    main_orientation (ss, &g_array_index (kpts, FpiAkazeKeypoint, i), border >= 0);
+ 
+   for (gint i = 0; i < ss->n_levels; i++)
+     g_free (masks[i]);
+@@ -1137,16 +1174,19 @@
+ #define MLDB_CHANNELS 3
+ #define MLDB_BITS ((6 + 36 + 120) * MLDB_CHANNELS)
+ 
++G_STATIC_ASSERT (MLDB_BITS == FPI_AKAZE_DESCRIPTOR_BITS);
++
+ /*
+  * MLDB_Fill_Values: mean of lt and of lx, ly rotated to the keypoint frame
+  * over each cell of a grid of step pixels, rotated by the keypoint angle;
+- * samples outside the level are skipped
++ * samples outside the level are skipped, and their cells flagged in outside
+  */
+ static void
+ mldb_fill_values (const FpiAkazeLevel *l, gint step, gfloat xf, gfloat yf,
+-                  gfloat co, gfloat si, gfloat scale, gfloat *values)
++                  gfloat co, gfloat si, gfloat scale, gfloat *values,
++                  guint8 *outside)
+ {
+-  gint valpos = 0;
++  gint valpos = 0, cell = 0;
+ 
+   for (gint i = -MLDB_PATTERN_SIZE; i < MLDB_PATTERN_SIZE; i += step)
+     for (gint j = -MLDB_PATTERN_SIZE; j < MLDB_PATTERN_SIZE; j += step)
+@@ -1154,6 +1194,8 @@
+         gfloat di = 0.f, dx = 0.f, dy = 0.f;
+         gint nsamples = 0;
+ 
++        outside[cell] = 0;
++
+         for (gint k = i; k < i + step; k++)
+           for (gint m = j; m < j + step; m++)
+             {
+@@ -1165,7 +1207,10 @@
+               gint p;
+ 
+               if (y1 < 0 || y1 >= l->height || x1 < 0 || x1 >= l->width)
+-                continue;
++                {
++                  outside[cell] = 1;
++                  continue;
++                }
+ 
+               p = y1 * l->width + x1;
+               di += l->lt[p];
+@@ -1189,17 +1234,20 @@
+         values[valpos + 1] = dx;
+         values[valpos + 2] = dy;
+         valpos += MLDB_CHANNELS;
++        cell++;
+       }
+ }
+ 
+ /*
+  * MLDB_Binary_Comparisons: one bit per pair of cells and channel, set when
+  * the first is larger; floats compared as CV_TOGGLE_FLT integers, so -0 is
+- * below +0
++ * below +0. With a mask, bits of pairs where neither cell is outside are
++ * set in it and counted in valid; the others are cleared in desc
+  */
+ static void
+-mldb_binary_comparisons (const gfloat *values, gint count, guint8 *desc,
+-                         gint *dpos)
++mldb_binary_comparisons (const gfloat *values, const guint8 *outside,
++                         gint count, guint8 *desc, guint8 *mask, gint *dpos,
++                         guint *valid)
+ {
+   gint32 iv[16 * MLDB_CHANNELS];
+ 
+@@ -1214,17 +1262,28 @@
+ 
+         for (gint j = i + 1; j < count; j++)
+           {
++            if (mask && (outside[i] || outside[j]))
++              {
++                (*dpos)++;
++                continue;
++              }
+             if (ival > iv[MLDB_CHANNELS * j + pos])
+               desc[*dpos >> 3] |= 1 << (*dpos & 7);
++            if (mask)
++              {
++                mask[*dpos >> 3] |= 1 << (*dpos & 7);
++                (*valid)++;
++              }
+             (*dpos)++;
+           }
+       }
+ }
+ 
+-/* Get_MLDB_Full_Descriptor: 2x2, 3x3 and 4x4 grids */
+-static void
++/* Get_MLDB_Full_Descriptor: 2x2, 3x3 and 4x4 grids; with a mask, the
++ * valid bits as mldb_binary_comparisons() gives them, and their number */
++static guint
+ mldb_descriptor (const FpiAkazeScaleSpace *ss, const FpiAkazeKeypoint *kp,
+-                 guint8 *desc)
++                 guint8 *desc, guint8 *mask)
+ {
+   /* pattern_size, divUp (2 pattern_size, 3), divUp (pattern_size, 2) */
+   static const gint sample_step[3] = { 10, 7, 5 };
+@@ -1234,18 +1293,25 @@
+   const gfloat angle = kp->angle * (gfloat) (G_PI / 180.0);
+   const gfloat co = cosf (angle), si = sinf (angle);
+   gfloat values[16 * MLDB_CHANNELS];
++  guint8 outside[16];
+   gint dpos = 0;
++  guint valid = 0;
+ 
+   memset (desc, 0, FPI_AKAZE_DESCRIPTOR_LEN);
++  if (mask)
++    memset (mask, 0, FPI_AKAZE_DESCRIPTOR_LEN);
+ 
+   for (gint lvl = 0; lvl < 3; lvl++)
+     {
+       mldb_fill_values (l, sample_step[lvl], kp->x / ratio, kp->y / ratio,
+-                        co, si, scale, values);
+-      mldb_binary_comparisons (values, (lvl + 2) * (lvl + 2), desc, &dpos);
++                        co, si, scale, values, outside);
++      mldb_binary_comparisons (values, outside, (lvl + 2) * (lvl + 2), desc,
++                               mask, &dpos, &valid);
+     }
+ 
+   g_assert (dpos == MLDB_BITS);
++
++  return valid;
+ }
+ 
+ typedef struct
+@@ -1347,15 +1413,60 @@
+  * Returns: (transfer full): the features, or %NULL if the padded image is
+  *   too small or does not halve exactly
+  */
++/* the strongest keypoints of kpts with their descriptors, and masks if
++ * masked; positions moved back by pad */
++static FpiAkazeFeatures *
++features_new (const FpiAkazeScaleSpace *ss, GArray *kpts, gint pad,
++              guint max_keypoints, gboolean masked)
++{
++  FpiAkazeFeatures *f;
++
++  keep_strongest (kpts, max_keypoints);
++
++  f = g_new0 (FpiAkazeFeatures, 1);
++  f->n = kpts->len;
++  f->points = g_new (FpiKeypoint, f->n);
++  f->descriptors = g_new (guint8, (gsize) f->n * FPI_AKAZE_DESCRIPTOR_LEN);
++  if (masked)
++    {
++      f->masks = g_new (guint8, (gsize) f->n * FPI_AKAZE_DESCRIPTOR_LEN);
++      f->valid_bits = g_new (guint16, f->n);
++    }
++
++  for (guint i = 0; i < f->n; i++)
++    {
++      const FpiAkazeKeypoint *kp = &g_array_index (kpts, FpiAkazeKeypoint, i);
++      const gsize at = (gsize) i * FPI_AKAZE_DESCRIPTOR_LEN;
++      guint valid;
++
++      valid = mldb_descriptor (ss, kp, f->descriptors + at,
++                               masked ? f->masks + at : NULL);
++      if (masked)
++        f->valid_bits[i] = valid;
++    }
++
++  for (guint i = 0; i < f->n; i++)
++    {
++      FpiAkazeKeypoint *kp = &g_array_index (kpts, FpiAkazeKeypoint, i);
++
++      kp->x -= pad;
++      kp->y -= pad;
++      f->points[i].x = kp->x;
++      f->points[i].y = kp->y;
++    }
++
++  f->keypoints = (FpiAkazeKeypoint *) (gpointer) g_array_free (kpts, FALSE);
++
++  return f;
++}
++
+ FpiAkazeFeatures *
+ fpi_akaze_extract_full (const guint8 *image, gint width, gint height,
+                         gint pad, gboolean replicate,
+                         gfloat threshold, guint max_keypoints)
+ {
+   g_autoptr(FpiAkazeScaleSpace) ss = NULL;
+-  g_autoptr(GArray) kpts = NULL;
+   g_autofree guint8 *padded = NULL;
+-  FpiAkazeFeatures *f;
+ 
+   g_return_val_if_fail (pad >= 0 && pad < width && pad < height, NULL);
+ 
+@@ -1377,34 +1488,42 @@
+   if (!ss)
+     return NULL;
+ 
+-  kpts = fpi_akaze_detect (ss, threshold);
+-  keep_strongest (kpts, max_keypoints);
+-
+-  f = g_new0 (FpiAkazeFeatures, 1);
+-  f->n = kpts->len;
+-  f->points = g_new (FpiKeypoint, f->n);
+-  f->descriptors = g_new (guint8, (gsize) f->n * FPI_AKAZE_DESCRIPTOR_LEN);
+-
+-  for (guint i = 0; i < f->n; i++)
+-    {
+-      const FpiAkazeKeypoint *kp = &g_array_index (kpts, FpiAkazeKeypoint, i);
+-
+-      mldb_descriptor (ss, kp, f->descriptors + (gsize) i * FPI_AKAZE_DESCRIPTOR_LEN);
+-    }
++  return features_new (ss, fpi_akaze_detect (ss, threshold), pad,
++                       max_keypoints, FALSE);
++}
+ 
+-  for (guint i = 0; i < f->n; i++)
+-    {
+-      FpiAkazeKeypoint *kp = &g_array_index (kpts, FpiAkazeKeypoint, i);
++/**
++ * fpi_akaze_extract_masked:
++ * @image: 8-bit image, as fpi_keypoint_prepare_image() gives
++ * @width: width of @image
++ * @height: height of @image
++ * @border: as for fpi_akaze_detect_full(), FPI_AKAZE_MASKED_BORDER unless
++ *   testing others; not negative
++ * @threshold: as for fpi_akaze_extract()
++ * @max_keypoints: as for fpi_akaze_extract()
++ *
++ * fpi_akaze_extract() without padding, with keypoints nearer the edge than
++ * their descriptors fit. Descriptor bits comparing a grid cell with a
++ * sample outside the level are cleared, and left out of the masks: a set
++ * mask bit is a valid descriptor bit. A descriptor that fits has all
++ * FPI_AKAZE_DESCRIPTOR_BITS valid.
++ *
++ * Returns: (transfer full): the features, or %NULL if @image is too small
++ */
++FpiAkazeFeatures *
++fpi_akaze_extract_masked (const guint8 *image, gint width, gint height,
++                          gint border, gfloat threshold, guint max_keypoints)
++{
++  g_autoptr(FpiAkazeScaleSpace) ss = NULL;
+ 
+-      kp->x -= pad;
+-      kp->y -= pad;
+-      f->points[i].x = kp->x;
+-      f->points[i].y = kp->y;
+-    }
++  g_return_val_if_fail (border >= 0, NULL);
+ 
+-  f->keypoints = (FpiAkazeKeypoint *) (gpointer) g_array_free (g_steal_pointer (&kpts), FALSE);
++  ss = fpi_akaze_scale_space_new (image, width, height);
++  if (!ss)
++    return NULL;
+ 
+-  return f;
++  return features_new (ss, fpi_akaze_detect_full (ss, threshold, border), 0,
++                       max_keypoints, TRUE);
+ }
+ 
+ void
+@@ -1416,6 +1535,8 @@
+   g_free (features->keypoints);
+   g_free (features->points);
+   g_free (features->descriptors);
++  g_free (features->masks);
++  g_free (features->valid_bits);
+   g_free (features);
+ }
+ 
+@@ -1477,3 +1598,36 @@
+                                         FPI_KEYPOINT_MATCH_LIMIT_ANGLE,
+                                         inliers);
+ }
++
++/**
++ * fpi_akaze_match_score_masked:
++ * @probe: features of the new image
++ * @probe_masks: (nullable): FpiAkazeFeatures.masks of @probe
++ * @gallery: features of an enrolled image
++ * @gallery_masks: (nullable): FpiAkazeFeatures.masks of @gallery
++ * @min_valid_bits: FPI_AKAZE_MIN_VALID_BITS unless testing other floors
++ * @inliers: (out) (optional): as for fpi_keypoint_match_score_full()
++ *
++ * fpi_akaze_match_score() with fpi_keypoint_match_score_masked() for
++ * fpi_akaze_extract_masked() features; without both masks the same score
++ * as fpi_akaze_match_score().
++ *
++ * Returns: the number of matches agreeing with the best transform
++ */
++guint
++fpi_akaze_match_score_masked (const FpiKeypoints *probe,
++                              const guint8 *probe_masks,
++                              const FpiKeypoints *gallery,
++                              const guint8 *gallery_masks,
++                              guint min_valid_bits, guint *inliers)
++{
++  return fpi_keypoint_match_score_masked (probe, probe_masks,
++                                          gallery, gallery_masks,
++                                          min_valid_bits,
++                                          FPI_AKAZE_DESCRIPTOR_LEN,
++                                          FPI_AKAZE_MAX_ERROR,
++                                          FPI_KEYPOINT_MAX_MATCHES,
++                                          FPI_KEYPOINT_MATCH_MUTUAL |
++                                          FPI_KEYPOINT_MATCH_LIMIT_ANGLE,
++                                          inliers);
++}
+--- a/libfprint/fpi-keypoint-match.h
++++ b/libfprint/fpi-keypoint-match.h
+@@ -84,4 +84,15 @@
+                                      FpiKeypointMatchFlags flags,
+                                      guint                *inliers);
+ 
++guint fpi_keypoint_match_score_masked (const FpiKeypoints   *probe,
++                                       const guint8         *probe_masks,
++                                       const FpiKeypoints   *gallery,
++                                       const guint8         *gallery_masks,
++                                       guint                 min_valid_bits,
++                                       guint                 desc_len,
++                                       gdouble               max_error,
++                                       guint                 max_matches,
++                                       FpiKeypointMatchFlags flags,
++                                       guint                *inliers);
++
+ G_END_DECLS
+--- a/libfprint/fpi-keypoint-match.c
++++ b/libfprint/fpi-keypoint-match.c
+@@ -144,6 +144,74 @@
+   return d;
+ }
+ 
++/* Masked binary descriptors: the share of differing bits among the bits
++ * valid in both, num / den = d_norm / FPI_AKAZE_DESCRIPTOR_BITS kept as an
++ * exact fraction, so the ratio test and the order need no rounding. Fewer
++ * than @min_valid bits valid in both is no distance at all. */
++static inline __attribute__((always_inline)) Dist
++distance_hamming_masked (const guint8 *a, const guint8 *ma,
++                         const guint8 *b, const guint8 *mb,
++                         guint len, guint min_valid)
++{
++  Dist d = { 0, 0 };
++  guint i = 0;
++
++  for (; i + 8 <= len; i += 8)
++    {
++      guint64 wa, wb, wma, wmb, m;
++
++      memcpy (&wa, a + i, 8);
++      memcpy (&wb, b + i, 8);
++      memcpy (&wma, ma + i, 8);
++      memcpy (&wmb, mb + i, 8);
++      m = wma & wmb;
++      d.den += popcount64 (m);
++      d.num += popcount64 ((wa ^ wb) & m);
++    }
++  if (i < len)
++    {
++      guint64 wa = 0, wb = 0, wma = 0, wmb = 0, m;
++
++      memcpy (&wa, a + i, len - i);
++      memcpy (&wb, b + i, len - i);
++      memcpy (&wma, ma + i, len - i);
++      memcpy (&wmb, mb + i, len - i);
++      m = wma & wmb;
++      d.den += popcount64 (m);
++      d.num += popcount64 ((wa ^ wb) & m);
++    }
++  if (d.den == 0 || d.den < min_valid)
++    return infinite;
++  return d;
++}
++
++static inline __attribute__((always_inline)) void
++nearest_masked (const guint8 *desc, const guint8 *mask, const FpiKeypoints *set,
++                const guint8 *set_masks, guint len, guint min_valid,
++                guint *best, Dist *d1, Dist *d2)
++{
++  *d1 = *d2 = infinite;
++  *best = 0;
++  for (guint i = 0; i < set->n; i++)
++    {
++      Dist d = distance_hamming_masked (desc, mask,
++                                        set->descriptors + (gsize) i * len,
++                                        set_masks + (gsize) i * len,
++                                        len, min_valid);
++
++      if (dist_less (d, *d1))
++        {
++          *d2 = *d1;
++          *d1 = d;
++          *best = i;
++        }
++      else if (dist_less (d, *d2))
++        {
++          *d2 = d;
++        }
++    }
++}
++
+ /* Nearest and second nearest whole number distance. Inlined with constant
+  * arguments below, so that each case gets a loop the compiler can vectorize:
+  * this is where the time goes. */
+@@ -173,13 +241,26 @@
+ }
+ 
+ /* Nearest (and second nearest) of @desc among @set; ties go to the lower
+- * index. */
++ * index. With @set_masks, masked hamming distances of @desc under @mask. */
+ static void
+ nearest (FpiKeypointMetric metric, guint len, const guint8 *desc,
+-         const FpiKeypoints *set, guint *best, Dist *d1, Dist *d2)
++         const guint8 *mask, const FpiKeypoints *set,
++         const guint8 *set_masks, guint min_valid,
++         guint *best, Dist *d1, Dist *d2)
+ {
+   guint32 n1, n2;
+ 
++  if (set_masks)
++    {
++      if (len == FPI_AKAZE_DESCRIPTOR_LEN)
++        nearest_masked (desc, mask, set, set_masks, FPI_AKAZE_DESCRIPTOR_LEN,
++                        min_valid, best, d1, d2);
++      else
++        nearest_masked (desc, mask, set, set_masks, len, min_valid,
++                        best, d1, d2);
++      return;
++    }
++
+   if (metric == FPI_KEYPOINT_TERNARY)
+     {
+       *d1 = *d2 = infinite;
+@@ -291,41 +372,19 @@
+                                         flags, inliers);
+ }
+ 
+-/**
+- * fpi_keypoint_match_score_full:
+- * @probe: keypoints of the image to verify
+- * @gallery: keypoints of an enrolled image
+- * @metric: how descriptors are compared: euclidean distance of bytes,
+- *   Hamming distance of bits, or ternary codes (sign bits, then as many
+- *   "trusted" bits; distance = disagreeing signs among dimensions both
+- *   trust, over their number)
+- * @desc_len: bytes per descriptor
+- * @max_error: distance in pixels within which a match agrees with a transform
+- * @max_matches: candidate matches kept for the transform search, the
+- *   closest; FPI_KEYPOINT_MAX_MATCHES unless testing other caps
+- * @flags: #FpiKeypointMatchFlags
+- * @inliers: (out) (optional): probe->n entries, receives the indices of the
+- *   probe keypoints that agree with the transform
+- *
+- * Only the first FPI_KEYPOINT_MAX_POINTS keypoints of each image are used.
+- * With P = FPI_KEYPOINT_MAX_POINTS and M = MIN (@max_matches, P), the work
+- * is bounded by the caps alone: at most 2 P^2 descriptor distances (P^2
+- * with no mutual check), a sort of P matches, N_BEST (N_BEST - 1) / 2 =
+- * 1225 transforms checked against M matches each, one pass to mark the
+- * inliers, and with FPI_KEYPOINT_MATCH_REFIT N_REFIT refits of at most 4
+- * passes over M matches.
+- *
+- * Returns: the number of matches agreeing with the best transform
+- */
+-guint
+-fpi_keypoint_match_score_full (const FpiKeypoints   *probe,
+-                               const FpiKeypoints   *gallery,
+-                               FpiKeypointMetric     metric,
+-                               guint                 desc_len,
+-                               gdouble               max_error,
+-                               guint                 max_matches,
+-                               FpiKeypointMatchFlags flags,
+-                               guint                *inliers)
++/* with masks on both sides, masked hamming distances */
++static guint
++match_score (const FpiKeypoints   *probe,
++             const guint8         *probe_masks,
++             const FpiKeypoints   *gallery,
++             const guint8         *gallery_masks,
++             guint                 min_valid,
++             FpiKeypointMetric     metric,
++             guint                 desc_len,
++             gdouble               max_error,
++             guint                 max_matches,
++             FpiKeypointMatchFlags flags,
++             guint                *inliers)
+ {
+   FpiKeypoints p = *probe, g = *gallery;
+   const guint64 rnum = metric == FPI_KEYPOINT_L2 ? RATIO_NUM * RATIO_NUM : RATIO_NUM;
+@@ -350,7 +409,9 @@
+       guint gi, back;
+       Dist d1, d2, b1, b2;
+ 
+-      nearest (metric, desc_len, desc, &g, &gi, &d1, &d2);
++      nearest (metric, desc_len, desc,
++               probe_masks ? probe_masks + (gsize) q * desc_len : NULL,
++               &g, gallery_masks, min_valid, &gi, &d1, &d2);
+       /* rden * d1 < rnum * d2, both finite */
+       if (d1.den == 0 || d2.den == 0 ||
+           rden * d1.num * d2.den >= rnum * d2.num * d1.den)
+@@ -359,7 +420,8 @@
+       if (flags & FPI_KEYPOINT_MATCH_MUTUAL)
+         {
+           nearest (metric, desc_len, g.descriptors + (gsize) gi * desc_len,
+-                   &p, &back, &b1, &b2);
++                   gallery_masks ? gallery_masks + (gsize) gi * desc_len : NULL,
++                   &p, probe_masks, min_valid, &back, &b1, &b2);
+           if (back != q)
+             continue;
+         }
+@@ -483,3 +545,90 @@
+ 
+   return best;
+ }
++
++/**
++ * fpi_keypoint_match_score_full:
++ * @probe: keypoints of the image to verify
++ * @gallery: keypoints of an enrolled image
++ * @metric: how descriptors are compared: euclidean distance of bytes,
++ *   Hamming distance of bits, or ternary codes (sign bits, then as many
++ *   "trusted" bits; distance = disagreeing signs among dimensions both
++ *   trust, over their number)
++ * @desc_len: bytes per descriptor
++ * @max_error: distance in pixels within which a match agrees with a transform
++ * @max_matches: candidate matches kept for the transform search, the
++ *   closest; FPI_KEYPOINT_MAX_MATCHES unless testing other caps
++ * @flags: #FpiKeypointMatchFlags
++ * @inliers: (out) (optional): probe->n entries, receives the indices of the
++ *   probe keypoints that agree with the transform
++ *
++ * Only the first FPI_KEYPOINT_MAX_POINTS keypoints of each image are used.
++ * With P = FPI_KEYPOINT_MAX_POINTS and M = MIN (@max_matches, P), the work
++ * is bounded by the caps alone: at most 2 P^2 descriptor distances (P^2
++ * with no mutual check), a sort of P matches, N_BEST (N_BEST - 1) / 2 =
++ * 1225 transforms checked against M matches each, one pass to mark the
++ * inliers, and with FPI_KEYPOINT_MATCH_REFIT N_REFIT refits of at most 4
++ * passes over M matches.
++ *
++ * Returns: the number of matches agreeing with the best transform
++ */
++guint
++fpi_keypoint_match_score_full (const FpiKeypoints   *probe,
++                               const FpiKeypoints   *gallery,
++                               FpiKeypointMetric     metric,
++                               guint                 desc_len,
++                               gdouble               max_error,
++                               guint                 max_matches,
++                               FpiKeypointMatchFlags flags,
++                               guint                *inliers)
++{
++  return match_score (probe, NULL, gallery, NULL, 0, metric, desc_len,
++                      max_error, max_matches, flags, inliers);
++}
++
++/**
++ * fpi_keypoint_match_score_masked:
++ * @probe: keypoints of the image to verify
++ * @probe_masks: (nullable): @desc_len bytes per probe keypoint, a bit set
++ *   for each valid descriptor bit
++ * @gallery: keypoints of an enrolled image
++ * @gallery_masks: (nullable): as @probe_masks, for @gallery
++ * @min_valid_bits: pairs with fewer bits valid in both are no candidates;
++ *   FPI_AKAZE_MIN_VALID_BITS for AKAZE unless testing other floors
++ * @desc_len: bytes per descriptor
++ * @max_error: distance in pixels within which a match agrees with a transform
++ * @max_matches: as for fpi_keypoint_match_score_full()
++ * @flags: #FpiKeypointMatchFlags
++ * @inliers: (out) (optional): as for fpi_keypoint_match_score_full()
++ *
++ * fpi_keypoint_match_score_full() of binary descriptors with validity
++ * masks: the distance of two descriptors a, b with masks ma, mb is
++ * popcount ((a ^ b) & ma & mb) / popcount (ma & mb), the hamming distance
++ * over the bits valid in both scaled to all of them, compared as an exact
++ * fraction. The ratio test and the mutual check use it as they do the plain
++ * hamming distance. Without both masks this is fpi_keypoint_match_score_full()
++ * with FPI_KEYPOINT_HAMMING, score for score.
++ *
++ * A distance costs one more AND and popcount per 64 bits than the plain one;
++ * the caps of fpi_keypoint_match_score_full() bound the work the same way.
++ *
++ * Returns: the number of matches agreeing with the best transform
++ */
++guint
++fpi_keypoint_match_score_masked (const FpiKeypoints   *probe,
++                                 const guint8         *probe_masks,
++                                 const FpiKeypoints   *gallery,
++                                 const guint8         *gallery_masks,
++                                 guint                 min_valid_bits,
++                                 guint                 desc_len,
++                                 gdouble               max_error,
++                                 guint                 max_matches,
++                                 FpiKeypointMatchFlags flags,
++                                 guint                *inliers)
++{
++  if (!probe_masks || !gallery_masks)
++    probe_masks = gallery_masks = NULL;
++  return match_score (probe, probe_masks, gallery, gallery_masks,
++                      min_valid_bits, FPI_KEYPOINT_HAMMING, desc_len,
++                      max_error, max_matches, flags, inliers);
++}
+--- a/tests/test-fpi-keypoint.c
++++ b/tests/test-fpi-keypoint.c
+@@ -18,6 +18,7 @@
+  */
+ 
+ #include <glib.h>
++#include <string.h>
+ 
+ #include "fp-print-private.h"
+ #include "fpi-image.h"
+@@ -32,6 +33,10 @@
+ #define ENROLLED 1, 1, 0, 0, 0xe371a740
+ #define PROBE 1, 2, 9, 6, 0x94c6caac
+ #define IMPOSTOR 2, 3, 0, 0, 0x874e74af
++/* the frames without their hash */
++#define ENROLLED_FRAME 1, 1, 0, 0
++#define PROBE_FRAME 1, 2, 9, 6
++#define IMPOSTOR_FRAME 2, 3, 0, 0
+ 
+ /* bench/matchers.py AkazeC.score (probe, enrolled) of these frames; the
+  * other order gives 46, so this also checks which image is the probe */
+@@ -275,6 +280,279 @@
+   g_assert_error (error, FP_DEVICE_ERROR, FP_DEVICE_ERROR_NOT_SUPPORTED);
+ }
+ 
++/* distance from (x, y) to the nearest edge of a w x h image */
++static gfloat
++edge_distance (gfloat x, gfloat y, gint w, gint h)
++{
++  return MIN (MIN (x, y), MIN (w - 1 - x, h - 1 - y));
++}
++
++static void
++test_keypoint_masked (void)
++{
++  g_autoptr(FpiAkazeScaleSpace) ss = NULL;
++  g_autoptr(FpiAkazeFeatures) plain = NULL;
++  g_autoptr(FpiAkazeFeatures) masked = NULL;
++  g_autoptr(FpiAkazeFeatures) again = NULL;
++  const gint w = SIZE * FPI_AKAZE_UPSCALE, h = SIZE * FPI_AKAZE_UPSCALE;
++  g_autofree guint8 *frame = g_new (guint8, SIZE * SIZE);
++  g_autofree guint8 *prepared = g_new (guint8, w * h);
++  gfloat plain_edge = G_MAXFLOAT, masked_edge = G_MAXFLOAT;
++  guint partial = 0, full = 0, same = 0;
++
++  synthetic_frame (ENROLLED_FRAME, frame);
++  fpi_keypoint_prepare_image_full (frame, SIZE, SIZE, FPI_AKAZE_UPSCALE,
++                                   FPI_AKAZE_CLAHE_CLIP, prepared);
++  ss = fpi_akaze_scale_space_new (prepared, w, h);
++
++  plain = fpi_akaze_extract (prepared, w, h, FPI_AKAZE_THRESHOLD, G_MAXUINT);
++  masked = fpi_akaze_extract_masked (prepared, w, h, FPI_AKAZE_MASKED_BORDER,
++                                     FPI_AKAZE_THRESHOLD, G_MAXUINT);
++  again = fpi_akaze_extract_masked (prepared, w, h, FPI_AKAZE_MASKED_BORDER,
++                                    FPI_AKAZE_THRESHOLD, G_MAXUINT);
++  g_assert_null (plain->masks);
++  g_assert_null (plain->valid_bits);
++  g_assert_nonnull (masked->masks);
++  g_assert_nonnull (masked->valid_bits);
++
++  /* repeatable */
++  g_assert_cmpuint (masked->n, ==, again->n);
++  g_assert_cmpmem (masked->keypoints, sizeof (FpiAkazeKeypoint) * masked->n,
++                   again->keypoints, sizeof (FpiAkazeKeypoint) * again->n);
++  g_assert_cmpmem (masked->descriptors, FPI_AKAZE_DESCRIPTOR_LEN * masked->n,
++                   again->descriptors, FPI_AKAZE_DESCRIPTOR_LEN * again->n);
++  g_assert_cmpmem (masked->masks, FPI_AKAZE_DESCRIPTOR_LEN * masked->n,
++                   again->masks, FPI_AKAZE_DESCRIPTOR_LEN * again->n);
++
++  for (guint i = 0; i < plain->n; i++)
++    plain_edge = MIN (plain_edge, edge_distance (plain->keypoints[i].x,
++                                                 plain->keypoints[i].y, w, h));
++
++  for (guint i = 0; i < masked->n; i++)
++    {
++      const FpiAkazeKeypoint *kp = &masked->keypoints[i];
++      const FpiAkazeLevel *l = &ss->levels[kp->level];
++      const guint8 *d = masked->descriptors + i * FPI_AKAZE_DESCRIPTOR_LEN;
++      const guint8 *m = masked->masks + i * FPI_AKAZE_DESCRIPTOR_LEN;
++      guint bits = 0;
++
++      for (guint j = 0; j < FPI_AKAZE_DESCRIPTOR_LEN; j++)
++        {
++          bits += __builtin_popcount (m[j]);
++          /* invalid bits are cleared */
++          g_assert_cmphex (d[j] & ~m[j], ==, 0);
++        }
++      g_assert_cmphex (m[FPI_AKAZE_DESCRIPTOR_LEN - 1] & 0xc0, ==, 0);
++      g_assert_cmpuint (bits, ==, masked->valid_bits[i]);
++      g_assert_cmpuint (bits, <=, FPI_AKAZE_DESCRIPTOR_BITS);
++
++      /* a descriptor window that fits the level is all valid */
++      if (edge_distance (kp->x / l->octave_ratio, kp->y / l->octave_ratio,
++                         l->width, l->height) >= l->border)
++        g_assert_cmpuint (bits, ==, FPI_AKAZE_DESCRIPTOR_BITS);
++
++      if (bits == FPI_AKAZE_DESCRIPTOR_BITS)
++        full++;
++      else
++        partial++;
++      masked_edge = MIN (masked_edge, edge_distance (kp->x, kp->y, w, h));
++
++      /* and where opencv has the keypoint, so is the descriptor */
++      for (guint j = 0; j < plain->n; j++)
++        if (memcmp (&plain->keypoints[j], kp, sizeof (*kp)) == 0)
++          {
++            g_assert_cmpmem (plain->descriptors + j * FPI_AKAZE_DESCRIPTOR_LEN,
++                             FPI_AKAZE_DESCRIPTOR_LEN, d, FPI_AKAZE_DESCRIPTOR_LEN);
++            same++;
++          }
++    }
++
++  g_assert_cmpuint (full, >, 0);
++  g_assert_cmpuint (partial, >, 0);
++  /* a few go to stronger maxima nearer the edge */
++  g_assert_cmpuint (same, >, plain->n * 8 / 10);
++  g_assert_cmpfloat (masked_edge, <, plain_edge);
++  /* within derivative support plus refinement of the edge at 3x */
++  g_assert_cmpfloat (masked_edge, <, FPI_AKAZE_UPSCALE * 3);
++}
++
++#define N_GRID 8
++#define DLEN FPI_AKAZE_DESCRIPTOR_LEN
++
++/* random descriptor bits, the last 2 of byte 60 zero */
++static void
++random_descriptor (guint32 seed, guint8 *d)
++{
++  for (guint j = 0; j < DLEN; j++)
++    d[j] = mix (seed * 977 + j) & 0xff;
++  d[DLEN - 1] &= 0x3f;
++}
++
++/* the first @bits descriptor bits valid */
++static void
++first_bits (guint bits, guint8 *m)
++{
++  memset (m, 0, DLEN);
++  for (guint j = 0; j < bits; j++)
++    m[j / 8] |= 1 << (j % 8);
++}
++
++/* flips @n valid bits of @d from bit @from on */
++static void
++flip_bits (guint8 *d, guint from, guint n)
++{
++  for (guint j = from; j < from + n; j++)
++    d[j / 8] ^= 1 << (j % 8);
++}
++
++/* N_GRID probe keypoints on a grid; the gallery has each at the same place
++ * (b) with @b_flipped of its bits flipped, all @b_bits valid, and with
++ * @a_bits > 0 also at a random place (a), 32 of its first a_bits = 256
++ * flipped, the rest invalid. The score is N_GRID when b is the match. */
++static guint
++grid_score (guint b_bits, guint b_flipped, guint a_bits, guint min_valid)
++{
++  FpiKeypoint pp[N_GRID], gp[2 * N_GRID];
++  guint8 pd[N_GRID * DLEN], pm[N_GRID * DLEN];
++  guint8 gd[2 * N_GRID * DLEN], gm[2 * N_GRID * DLEN];
++  guint ng = 0;
++  FpiKeypoints p, g;
++
++  for (guint k = 0; k < N_GRID; k++)
++    {
++      guint8 *b = gd + ng * DLEN;
++
++      pp[k] = (FpiKeypoint){ 20 + 30 * (k % 4), 20 + 40 * (k / 4) + 3 * k };
++      random_descriptor (k + 1, pd + k * DLEN);
++      first_bits (FPI_AKAZE_DESCRIPTOR_BITS, pm + k * DLEN);
++
++      gp[ng] = pp[k];
++      memcpy (b, pd + k * DLEN, DLEN);
++      flip_bits (b, 0, b_flipped);
++      first_bits (b_bits, gm + ng * DLEN);
++      for (guint j = 0; j < DLEN; j++)
++        b[j] &= gm[ng * DLEN + j];
++      ng++;
++
++      if (a_bits)
++        {
++          guint8 *a = gd + ng * DLEN;
++
++          gp[ng] = (FpiKeypoint){ mix (k + 100) % 250, mix (k + 200) % 250 };
++          memcpy (a, pd + k * DLEN, DLEN);
++          flip_bits (a, 0, 32);
++          first_bits (a_bits, gm + ng * DLEN);
++          for (guint j = 0; j < DLEN; j++)
++            a[j] &= gm[ng * DLEN + j];
++          ng++;
++        }
++    }
++
++  p = (FpiKeypoints){ N_GRID, pp, pd };
++  g = (FpiKeypoints){ ng, gp, gd };
++  return fpi_akaze_match_score_masked (&p, pm, &g, gm, min_valid, NULL);
++}
++
++static void
++test_keypoint_masked_distance (void)
++{
++  /* the same descriptor is distance 0 */
++  g_assert_cmpuint (grid_score (FPI_AKAZE_DESCRIPTOR_BITS, 0, 256, 0), ==, N_GRID);
++  g_assert_cmpuint (grid_score (200, 0, 0, 0), ==, N_GRID);
++
++  /* a: 32 of 256 differ, 60.75 of 486 scaled; b: x of 486. b is nearer
++   * though more of its bits differ, and passes the ratio test while
++   * 4 x 256 < 3 32 486, x <= 45 */
++  g_assert_cmpuint (grid_score (FPI_AKAZE_DESCRIPTOR_BITS, 40, 256, 0), ==, N_GRID);
++  g_assert_cmpuint (grid_score (FPI_AKAZE_DESCRIPTOR_BITS, 45, 256, 0), ==, N_GRID);
++  g_assert_cmpuint (grid_score (FPI_AKAZE_DESCRIPTOR_BITS, 46, 256, 0), ==, 0);
++  /* and scaled the same with half of b valid: 23 of 243 */
++  g_assert_cmpuint (grid_score (243, 22, 256, 0), ==, N_GRID);
++  g_assert_cmpuint (grid_score (243, 23, 256, 0), ==, 0);
++
++  /* a is no candidate below the floor, then b passes against the rest */
++  g_assert_cmpuint (grid_score (FPI_AKAZE_DESCRIPTOR_BITS, 46, 256, 257), ==, N_GRID);
++  /* nothing is a candidate */
++  g_assert_cmpuint (grid_score (160, 0, 0, 160), ==, N_GRID);
++  g_assert_cmpuint (grid_score (160, 0, 0, 161), ==, 0);
++}
++
++static void
++test_keypoint_masked_score (void)
++{
++  g_autoptr(FpImage) enrolled = frame_image (ENROLLED);
++  g_autoptr(FpImage) probe = frame_image (PROBE);
++  FpiAkazeFeatures *ef = enrolled->keypoints, *pf = probe->keypoints;
++  FpiKeypoints e = { ef->n, ef->points, ef->descriptors };
++  FpiKeypoints p = { pf->n, pf->points, pf->descriptors };
++  g_autofree guint8 *full_e = g_new (guint8, ef->n * DLEN);
++  g_autofree guint8 *full_p = g_new (guint8, pf->n * DLEN);
++  const gint w = SIZE * FPI_AKAZE_UPSCALE, h = SIZE * FPI_AKAZE_UPSCALE;
++  guint8 frame[SIZE * SIZE];
++  g_autofree guint8 *prepared = g_new (guint8, w * h);
++  g_autoptr(FpiAkazeFeatures) me = NULL;
++  g_autoptr(FpiAkazeFeatures) mp = NULL;
++  g_autoptr(FpiAkazeFeatures) mi = NULL;
++  FpiKeypoints ke, kp, ki;
++  guint genuine, impostor;
++
++  /* without both masks, the plain score */
++  g_assert_null (ef->masks);
++  g_assert_cmpuint (fpi_akaze_match_score_masked (&p, NULL, &e, NULL,
++                                                  FPI_AKAZE_MIN_VALID_BITS, NULL),
++                    ==, GENUINE_SCORE);
++  first_bits (FPI_AKAZE_DESCRIPTOR_BITS, full_p);
++  for (guint i = 1; i < pf->n; i++)
++    memcpy (full_p + i * DLEN, full_p, DLEN);
++  g_assert_cmpuint (fpi_akaze_match_score_masked (&p, full_p, &e, NULL,
++                                                  FPI_AKAZE_MIN_VALID_BITS, NULL),
++                    ==, GENUINE_SCORE);
++  /* all bits valid is the plain hamming distance over 486 */
++  first_bits (FPI_AKAZE_DESCRIPTOR_BITS, full_e);
++  for (guint i = 1; i < ef->n; i++)
++    memcpy (full_e + i * DLEN, full_e, DLEN);
++  g_assert_cmpuint (fpi_akaze_match_score_masked (&p, full_p, &e, full_e,
++                                                  FPI_AKAZE_MIN_VALID_BITS, NULL),
++                    ==, GENUINE_SCORE);
++  g_assert_cmpuint (fpi_akaze_match_score (&p, &e, NULL), ==, GENUINE_SCORE);
++
++  /* masked features of the same frames */
++  synthetic_frame (ENROLLED_FRAME, frame);
++  fpi_keypoint_prepare_image_full (frame, SIZE, SIZE, FPI_AKAZE_UPSCALE,
++                                   FPI_AKAZE_CLAHE_CLIP, prepared);
++  me = fpi_akaze_extract_masked (prepared, w, h, FPI_AKAZE_MASKED_BORDER,
++                                 FPI_AKAZE_THRESHOLD, FPI_AKAZE_MAX_KEYPOINTS);
++  synthetic_frame (PROBE_FRAME, frame);
++  fpi_keypoint_prepare_image_full (frame, SIZE, SIZE, FPI_AKAZE_UPSCALE,
++                                   FPI_AKAZE_CLAHE_CLIP, prepared);
++  mp = fpi_akaze_extract_masked (prepared, w, h, FPI_AKAZE_MASKED_BORDER,
++                                 FPI_AKAZE_THRESHOLD, FPI_AKAZE_MAX_KEYPOINTS);
++  synthetic_frame (IMPOSTOR_FRAME, frame);
++  fpi_keypoint_prepare_image_full (frame, SIZE, SIZE, FPI_AKAZE_UPSCALE,
++                                   FPI_AKAZE_CLAHE_CLIP, prepared);
++  mi = fpi_akaze_extract_masked (prepared, w, h, FPI_AKAZE_MASKED_BORDER,
++                                 FPI_AKAZE_THRESHOLD, FPI_AKAZE_MAX_KEYPOINTS);
++
++  ke = (FpiKeypoints){ me->n, me->points, me->descriptors };
++  kp = (FpiKeypoints){ mp->n, mp->points, mp->descriptors };
++  ki = (FpiKeypoints){ mi->n, mi->points, mi->descriptors };
++  genuine = fpi_akaze_match_score_masked (&kp, mp->masks, &ke, me->masks,
++                                          FPI_AKAZE_MIN_VALID_BITS, NULL);
++  impostor = fpi_akaze_match_score_masked (&ki, mi->masks, &ke, me->masks,
++                                           FPI_AKAZE_MIN_VALID_BITS, NULL);
++  g_test_message ("masked scores: genuine %u impostor %u (plain %u %u)",
++                  genuine, impostor, GENUINE_SCORE, IMPOSTOR_SCORE);
++
++  /* repeatable */
++  g_assert_cmpuint (fpi_akaze_match_score_masked (&kp, mp->masks, &ke, me->masks,
++                                                  FPI_AKAZE_MIN_VALID_BITS, NULL),
++                    ==, genuine);
++  g_assert_cmpuint (fpi_akaze_match_score_masked (&ki, mi->masks, &ke, me->masks,
++                                                  FPI_AKAZE_MIN_VALID_BITS, NULL),
++                    ==, impostor);
++  g_assert_cmpuint (genuine, >, impostor);
++}
++
+ int
+ main (int argc, char *argv[])
+ {
+@@ -284,6 +562,9 @@
+   g_test_add_func ("/keypoint/serialize/invalid", test_keypoint_serialize_invalid);
+   g_test_add_func ("/keypoint/score", test_keypoint_score);
+   g_test_add_func ("/keypoint/match-type", test_keypoint_match_type);
++  g_test_add_func ("/keypoint/akaze-masked", test_keypoint_masked);
++  g_test_add_func ("/keypoint/masked-distance", test_keypoint_masked_distance);
++  g_test_add_func ("/keypoint/masked-score", test_keypoint_masked_score);
+ 
+   return g_test_run ();
+ }

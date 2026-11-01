@@ -2,67 +2,69 @@ matcher: sigfm_fix
 3493 public images, 977 fingers, sensor 542 dpi
    impressions registered to the enrollment impression: 1593/2516
 
-=== B. simulated enroll/verify: 880 public fingers, 10 stages, jitter 20px, 3310 probes (features 65s)
-   2912800 probe x template comparisons in 1820s
-   genuine attempts 3146 (1878 registered), impostor attempts 2764621
+=== B. simulated enroll/verify: 880 public fingers, 10 stages, jitter 20px, 3310 probes (features 52s)
+   2912800 probe x template comparisons in 1215s
+   genuine attempts 3146 (1878 registered), impostor attempts 2576466
    threshold  false-reject% (registered / all)  false-accepts
-          10      19.1 /  49.1             614/2764621
-          15      20.3 /  50.1             473/2764621
-          24      22.2 /  51.5             385/2764621
-          45      24.4 /  53.1             329/2764621
-         100      28.0 /  55.5             276/2764621
-         200      31.3 /  57.7             229/2764621
-         500      36.0 /  60.8             173/2764621
-        1000      40.9 /  64.1             140/2764621
-   same finger number in sister datasets (excluded from impostors): 713 attempts, 133 score >= 24, max 8446
-   impostor score histogram: {0: 2751552, 1: 7542, 2: 2140, 3: 1423, 4: 551, 5: 277, 6: 256, 7: 134, 8: 68, 9: 64, 10: 54, 11: 32, 12: 19, 13: 23, 14: 13, 15: 24, 16: 13, 17: 9, 18: 7, 19: 7, 20: 8, 21: 10, 22: 8, 23: 2, 24: 1, 25: 3, 26: 4, 27: 8, 28: 9, 29: 1, 30: 3, 31: 2, 32: 2, 34: 4, 35: 4, 36: 6, 37: 2, 38: 1, 41: 1, 42: 4, 43: 1, 45: 1, 46: 3, 48: 2, 49: 2, 50: 1, 51: 3, 53: 2, 54: 1, 55: 1, 56: 3, 57: 1, 62: 3, 63: 3, 64: 1, 65: 2, 67: 1, 68: 1, 69: 1, 70: 1, 71: 1, 73: 1, 74: 3, 77: 1, 79: 2, 80: 1, 84: 1, 86: 2, 88: 3, 92: 1, 94: 1, 96: 1, 98: 2, 100: 1, 102: 1, 103: 1, 104: 2, 105: 3, 107: 2, 111: 1, 113: 1, 116: 1, 117: 1, 125: 1, 127: 1, 130: 1, 135: 2, 136: 1, 138: 2, 139: 1, 146: 2, 148: 1, 151: 2, 152: 1, 153: 1, 156: 1, 161: 1, 165: 2, 170: 1, 175: 2, 176: 1, 179: 1, 180: 1, 181: 1, 188: 1, 189: 1, 192: 1, 196: 1, 197: 1, 199: 1, 204: 1, 212: 1, 213: 1, 215: 1, 217: 1, 219: 1, 220: 1, 225: 1, 228: 1, 229: 1, 238: 2, 240: 1, 255: 1, 264: 1, 267: 1, 270: 1, 272: 1, 276: 1, 287: 1, 288: 1, 295: 1, 308: 1, 310: 1, 312: 1, 315: 1, 317: 1, 318: 1, 321: 1, 322: 1, 327: 1, 330: 1, 331: 1, 332: 1, 339: 1, 340: 1, 344: 1, 362: 1, 374: 1, 377: 2, 387: 1, 388: 1, 393: 1, 404: 1, 406: 1, 408: 1, 416: 1, 418: 1, 427: 1, 428: 1, 429: 1, 446: 1, 448: 1, 453: 1, 477: 1, 500: 1, 501: 1, 513: 1, 551: 1, 604: 1, 637: 1, 642: 1, 666: 2, 686: 1, 689: 1, 691: 1, 703: 1, 728: 1, 737: 1, 774: 1, 776: 1, 807: 2, 814: 1, 816: 1, 820: 1, 822: 1, 829: 1, 851: 1, 858: 1, 882: 1, 894: 1, 905: 1, 913: 2, 937: 1, 952: 1, 1001: 1, 1011: 1, 1023: 1, 1068: 1, 1072: 1, 1093: 1, 1163: 1, 1213: 1, 1237: 1, 1240: 1, 1246: 1, 1353: 1, 1367: 1, 1371: 1, 1391: 1, 1440: 1, 1461: 1, 1463: 1, 1466: 1, 1532: 1, 1682: 1, 1738: 1, 1760: 1, 1846: 1, 1861: 1, 1996: 1, 2001: 1, 2037: 1, 2045: 1, 2048: 1, 2057: 1, 2075: 1, 2078: 1, 2085: 1, 2102: 1, 2163: 1, 2220: 1, 2264: 1, 2314: 1, 2424: 1, 2451: 1, 2543: 1, 2548: 1, 2655: 1, 2675: 1, 2683: 1, 2728: 1, 2869: 1, 2879: 1, 3132: 1, 3206: 1, 3393: 1, 3434: 1, 3535: 1, 3599: 1, 3636: 1, 4039: 1, 4090: 1, 4220: 1, 4280: 1, 5048: 1, 5310: 1, 5412: 1, 5524: 1, 5568: 1, 5573: 1, 5805: 1, 5964: 1, 6019: 1, 6021: 1, 6062: 1, 6080: 1, 6347: 1, 6430: 1, 6554: 1, 6589: 1, 7028: 1, 7348: 1, 8058: 1, 8407: 1, 9004: 1, 9144: 1, 9398: 1, 9820: 1, 10028: 1, 10745: 1, 10753: 1, 10946: 1, 11963: 1, 12290: 1, 12703: 1, 12829: 1, 14095: 1, 14260: 1, 14416: 1, 15039: 1, 16106: 1, 16362: 1, 17531: 1, 19272: 1, 20062: 1, 20566: 1, 21652: 1, 22698: 1, 23101: 1, 25115: 1, 25492: 1, 29720: 1, 31388: 1, 34213: 1, 35436: 1, 36650: 1, 37245: 1, 43256: 1, 48533: 1, 48874: 1, 52143: 1, 54904: 1, 54942: 1, 59106: 1, 60204: 1, 61634: 1, 62988: 1, 65466: 1, 67235: 1, 67552: 1, 77190: 1, 96854: 1, 97958: 1, 111584: 1, 111823: 1, 114816: 1, 117503: 1, 150453: 1, 168299: 1, 183182: 1, 184269: 1, 250536: 1, 267936: 1, 288117: 1}
+          10      19.8 /  49.3             177/2576466
+          15      21.0 /  50.5             53/2576466
+          24      22.9 /  51.8             9/2576466
+          45      25.5 /  53.7             2/2576466
+         100      29.0 /  56.1             0/2576466
+         200      32.1 /  58.1             0/2576466
+         500      36.7 /  61.2             0/2576466
+        1000      41.9 /  64.6             0/2576466
+   same finger number in sister datasets (excluded from impostors): 188868 attempts, 495 score >= 24, max 307891
+   impostor score histogram: {0: 2564151, 1: 7378, 2: 2206, 3: 1329, 4: 502, 5: 270, 6: 231, 7: 121, 8: 60, 9: 41, 10: 61, 11: 32, 12: 12, 13: 10, 14: 9, 15: 13, 16: 3, 17: 6, 18: 3, 19: 1, 20: 5, 21: 11, 22: 1, 23: 1, 24: 1, 25: 1, 27: 2, 28: 1, 29: 1, 32: 1, 55: 1, 57: 1}
    genuine false-reject% by set at threshold 24:
-      fvc2000_DB1_B      registered  72.7% (n=22)  all  77.9% (n=77)
-      fvc2000_DB2_B      registered  32.5% (n=40)  all  49.1% (n=55)
-      fvc2000_DB3_B      registered  62.8% (n=43)  all  75.9% (n=79)
+      fvc2000_DB1_B      registered  63.6% (n=22)  all  76.6% (n=77)
+      fvc2000_DB2_B      registered  27.5% (n=40)  all  47.3% (n=55)
+      fvc2000_DB3_B      registered  60.5% (n=43)  all  74.7% (n=79)
       fvc2000_DB4_B      registered    n/a (n=0)  all  94.9% (n=78)  synthetic
-      fvc2002_DB1_B      registered  12.5% (n=32)  all  56.2% (n=80)
-      fvc2002_DB2_B      registered   6.7% (n=60)  all  22.5% (n=80)
-      fvc2002_DB3_B      registered  66.7% (n=6)  all  97.4% (n=77)
+      fvc2002_DB1_B      registered  18.8% (n=32)  all  60.0% (n=80)
+      fvc2002_DB2_B      registered   8.3% (n=60)  all  26.2% (n=80)
+      fvc2002_DB3_B      registered  50.0% (n=6)  all  94.8% (n=77)
       fvc2002_DB4_B      registered    n/a (n=0)  all 100.0% (n=78)  synthetic
-      fvc2004_DB1_B      registered  57.1% (n=14)  all  86.1% (n=72)
-      fvc2004_DB2_B      registered  72.1% (n=61)  all  78.5% (n=79)
-      fvc2004_DB3_B      registered  39.7% (n=68)  all  47.4% (n=78)
+      fvc2004_DB1_B      registered  57.1% (n=14)  all  83.3% (n=72)
+      fvc2004_DB2_B      registered  73.8% (n=61)  all  78.5% (n=79)
+      fvc2004_DB3_B      registered  41.2% (n=68)  all  48.7% (n=78)
       fvc2004_DB4_B      registered  37.5% (n=8)  all  91.7% (n=72)  synthetic
       fvs                registered   0.0% (n=166)  all   1.2% (n=168)
-      minex              registered  69.2% (n=39)  all  97.6% (n=575)
-      neuro_crossmatch   registered   3.7% (n=378)  all   6.1% (n=394)
-      neuro_uareu        registered   6.8% (n=474)  all   8.2% (n=499)
-      tsinghua           registered  41.5% (n=467)  all  54.2% (n=605)
+      minex              registered  71.8% (n=39)  all  97.7% (n=575)
+      neuro_crossmatch   registered   4.0% (n=378)  all   5.6% (n=394)
+      neuro_uareu        registered   6.3% (n=474)  all   8.0% (n=499)
+      tsinghua           registered  44.8% (n=467)  all  56.4% (n=605)
    highest impostor scores:
-      (288117, 'tsinghua', 'tsinghua/37', 'tsinghua/33')
-      (267936, 'tsinghua', 'tsinghua/80', 'tsinghua/79')
-      (250536, 'tsinghua', 'tsinghua/37', 'tsinghua/33')
-      (184269, 'tsinghua', 'tsinghua/35', 'tsinghua/38')
-      (183182, 'tsinghua', 'tsinghua/33', 'tsinghua/38')
-      (168299, 'tsinghua', 'tsinghua/35', 'tsinghua/38')
-      (150453, 'tsinghua', 'tsinghua/33', 'tsinghua/38')
-      (117503, 'tsinghua', 'tsinghua/38', 'tsinghua/34')
-      (114816, 'tsinghua', 'tsinghua/37', 'tsinghua/39')
-      (111823, 'tsinghua', 'tsinghua/33', 'tsinghua/37')
+      (57, 'fvs', 'fvs/9', 'tsinghua/55')
+      (55, 'neuro_crossmatch', 'neuro_crossmatch/045_4', 'neuro_crossmatch/017_7')
+      (32, 'fvc2000_DB1_B', 'fvc2000_DB1_B/108', 'tsinghua/50')
+      (29, 'fvs', 'fvs/12', 'tsinghua/10')
+      (28, 'fvc2004_DB1_B', 'fvc2004_DB1_B/108', 'tsinghua/314')
+      (27, 'minex', 'minex/027_05', 'tsinghua/159')
+      (27, 'minex', 'minex/014_02', 'tsinghua/94')
+      (25, 'fvc2000_DB3_B', 'fvc2000_DB3_B/107', 'neuro_crossmatch/022_6')
+      (24, 'fvc2000_DB2_B', 'fvc2000_DB2_B/106', 'minex/007_09')
+      (23, 'fvs', 'fvs/21', 'tsinghua/23')
 
-=== C. 6000 socofing strangers (162 dpi, 11743 probe patches) vs the 880 templates of B: 10333840 attempts in 6167s
-score histogram: {0: 10327458, 1: 4050, 2: 1062, 3: 730, 4: 232, 5: 89, 6: 92, 7: 49, 8: 17, 9: 19, 10: 17, 11: 8, 12: 6, 13: 1, 14: 1, 15: 4, 17: 1, 18: 1, 19: 2, 29: 1}
-   threshold   10: false accepts 42/10333840
-   threshold   15: false accepts 9/10333840
-   threshold   24: false accepts 1/10333840
-   threshold   45: false accepts 0/10333840
+=== C. 6000 socofing strangers (162 dpi, 11743 probe patches) vs the 880 templates of B: 10333840 attempts in 4211s
+score histogram: {0: 10300515, 1: 20000, 2: 5926, 3: 3731, 4: 1426, 5: 629, 6: 622, 7: 262, 8: 180, 9: 121, 10: 147, 11: 49, 12: 40, 13: 36, 14: 26, 15: 22, 16: 22, 17: 15, 18: 12, 19: 2, 20: 12, 21: 7, 22: 3, 23: 4, 24: 4, 25: 5, 26: 3, 27: 3, 28: 3, 30: 2, 31: 1, 34: 1, 35: 1, 37: 2, 40: 1, 42: 2, 43: 2, 57: 1}
+   threshold   10: false accepts 428/10333840
+   threshold   15: false accepts 130/10333840
+   threshold   24: false accepts 31/10333840
+   threshold   45: false accepts 1/10333840
    threshold  100: false accepts 0/10333840
    threshold  200: false accepts 0/10333840
    threshold  500: false accepts 0/10333840
    threshold 1000: false accepts 0/10333840
+libpng warning: iCCP: profile 'ICC profile': 'GRAY': Gray color space not permitted on RGB PNG
+libpng warning: iCCP: profile 'ICC profile': 'GRAY': Gray color space not permitted on RGB PNG
 
-=== C. 1500 family strangers (380 dpi, 745 probe patches) vs the 880 templates of B: 655600 attempts in 292s
-score histogram: {0: 655593, 1: 2, 2: 4, 10: 1}
-   threshold   10: false accepts 1/655600
-   threshold   15: false accepts 0/655600
-   threshold   24: false accepts 0/655600
-   threshold   45: false accepts 0/655600
+=== C. 1500 family strangers (380 dpi, 745 probe patches) vs the 880 templates of B: 655600 attempts in 245s
+score histogram: {0: 653370, 1: 1406, 2: 350, 3: 218, 4: 90, 5: 40, 6: 42, 7: 20, 8: 14, 9: 9, 10: 8, 11: 2, 12: 3, 13: 4, 14: 3, 15: 3, 16: 3, 17: 2, 18: 2, 19: 2, 22: 2, 23: 1, 24: 1, 27: 1, 29: 1, 51: 1, 52: 1, 66: 1}
+   threshold   10: false accepts 41/655600
+   threshold   15: false accepts 21/655600
+   threshold   24: false accepts 6/655600
+   threshold   45: false accepts 3/655600
    threshold  100: false accepts 0/655600
    threshold  200: false accepts 0/655600
    threshold  500: false accepts 0/655600

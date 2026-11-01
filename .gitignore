@@ -7,3 +7,11 @@ __pycache__/
 *.pyc
 kpm/
 quant/
+# fetched AKAZE reference sources, see akaze/fetch.sh
+akaze/ref/
+# built NBIS, see nbis/build.sh
+nbis/build/
+# built per-pair timer, see timing/build.sh
+timing/build/
+# built libfprint fidelity tool, see fidelity/build.sh
+fidelity/build/

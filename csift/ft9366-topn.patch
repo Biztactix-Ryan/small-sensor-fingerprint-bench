@@ -1,0 +1,136 @@
+--- a/ft9366-match.c
++++ b/ft9366-match.c
+@@ -386,7 +386,7 @@
+  * refined contrast is too low */
+ static gboolean
+ interp_extremum (const Pyramid *pyr, gint o, gint *i, gint *x, gint *y,
+-                 gdouble *xi, gdouble *xr, gdouble *xc)
++                 gdouble *xi, gdouble *xr, gdouble *xc, gdouble *contrast)
+ {
+   const gint w = pyr->dog[o][0]->w, h = pyr->dog[o][0]->h;
+   gdouble dx, dy, ds, dxx, dyy, dss, dxy, dxs, dys, v;
+@@ -449,6 +449,7 @@
+ 
+   /* contrast at the refined position */
+   v = DOG (o, *i, *x, *y) + 0.5 * (dx * *xc + dy * *xr + ds * *xi);
++  *contrast = fabs (v);
+   return fabs (v) >= SIFT_CONTR_THR / SIFT_INTVLS;
+ }
+ 
+@@ -579,8 +580,36 @@
+     d[k] /= norm;
+ }
+ 
+-Ft9366Features *
+-ft9366_features_new (const guint8 *image)
++/* a keypoint found, its descriptor not computed yet */
++typedef struct
++{
++  gint    o, i;
++  gdouble x, y, ori, scl, contrast;
++  guint   index;
++} Ft9366Cand;
++
++static gint
++cand_cmp (gconstpointer a, gconstpointer b)
++{
++  const Ft9366Cand *ca = a, *cb = b;
++
++  if (ca->contrast != cb->contrast)
++    return ca->contrast > cb->contrast ? -1 : 1;
++  return ca->index < cb->index ? -1 : ca->index > cb->index;
++}
++
++static gint
++cand_index_cmp (gconstpointer a, gconstpointer b)
++{
++  const Ft9366Cand *ca = a, *cb = b;
++
++  return ca->index < cb->index ? -1 : ca->index > cb->index;
++}
++
++/* the max (<= FT9366_MAX_KP) keypoints of highest contrast, in the order
++ * they are found */
++static Ft9366Features *
++ft9366_features_new_max (const guint8 *image, guint max)
+ {
+   const gint w = FT9366_FRAME_WIDTH, h = FT9366_FRAME_HEIGHT, m = FT9366_MASK_MARGIN;
+   Ft9366Features *f = g_new0 (Ft9366Features, 1);
+@@ -609,7 +638,10 @@
+   pyramid_build (pyr, base);
+   img_free (base);
+ 
+-  for (gint o = 0; o < SIFT_OCTAVES && f->n < FT9366_MAX_KP; o++)
++  g_autoptr(GArray) cands = g_array_new (FALSE, FALSE, sizeof (Ft9366Cand));
++
++  max = MIN (max, FT9366_MAX_KP);
++  for (gint o = 0; o < SIFT_OCTAVES; o++)
+     {
+       const gint ow = pyr->dog[o][0]->w, oh = pyr->dog[o][0]->h;
+       const gdouble to_sensor = pow (2.0, o) / 2;   /* octave px -> sensor px */
+@@ -619,12 +651,12 @@
+           for (gint x = SIFT_BORDER; x < ow - SIFT_BORDER; x++)
+             {
+               gint ii = i, xx = x, yy = y, sx, sy, no;
+-              gdouble xi = 0, xr = 0, xc = 0, scl, oris[SIFT_ORI_BINS];
++              gdouble xi = 0, xr = 0, xc = 0, contrast = 0, scl, oris[SIFT_ORI_BINS];
+ 
+               if (fabs (DOG (o, i, x, y)) <= 0.5 * SIFT_CONTR_THR / SIFT_INTVLS ||
+                   !is_extremum (pyr, o, i, x, y))
+                 continue;
+-              if (!interp_extremum (pyr, o, &ii, &xx, &yy, &xi, &xr, &xc) ||
++              if (!interp_extremum (pyr, o, &ii, &xx, &yy, &xi, &xr, &xc, &contrast) ||
+                   is_edge_like (pyr, o, ii, xx, yy))
+                 continue;
+ 
+@@ -635,22 +667,44 @@
+ 
+               scl = SIFT_SIGMA * pow (2.0, (ii + xi) / SIFT_INTVLS);
+               no = orientations (pyr->gauss[o][ii], xx, yy, scl, oris);
+-              for (gint k = 0; k < no && f->n < FT9366_MAX_KP; k++)
++              for (gint k = 0; k < no; k++)
+                 {
+-                  Ft9366Kp *kp = &f->kp[f->n++];
++                  Ft9366Cand c = { o, ii, xx + xc, yy + xr, oris[k], scl, contrast, cands->len };
+ 
+-                  kp->x = (xx + xc) * to_sensor;
+-                  kp->y = (yy + xr) * to_sensor;
+-                  kp->ori = oris[k];
+-                  descriptor (pyr->gauss[o][ii], xx + xc, yy + xr, oris[k], scl, kp->d);
++                  g_array_append_val (cands, c);
+                 }
+             }
+     }
+ 
++  /* keep the strongest: sort by contrast, then restore the found order */
++  if (cands->len > max)
++    {
++      g_array_sort (cands, cand_cmp);
++      g_array_set_size (cands, max);
++      g_array_sort (cands, cand_index_cmp);
++    }
++  for (guint k = 0; k < cands->len; k++)
++    {
++      const Ft9366Cand *c = &g_array_index (cands, Ft9366Cand, k);
++      const gdouble to_sensor = pow (2.0, c->o) / 2;
++      Ft9366Kp *kp = &f->kp[f->n++];
++
++      kp->x = c->x * to_sensor;
++      kp->y = c->y * to_sensor;
++      kp->ori = c->ori;
++      descriptor (pyr->gauss[c->o][c->i], c->x, c->y, c->ori, c->scl, kp->d);
++    }
++
+   pyramid_free (pyr);
+   return f;
+ }
+ 
++Ft9366Features *
++ft9366_features_new (const guint8 *image)
++{
++  return ft9366_features_new_max (image, FT9366_MAX_KP);
++}
++
+ void
+ ft9366_features_free (Ft9366Features *features)
+ {

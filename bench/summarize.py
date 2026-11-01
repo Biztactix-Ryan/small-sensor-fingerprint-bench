@@ -9,11 +9,18 @@ rate per set. A second table gives the false-reject rate at a fixed
 false-accept rate (1e-5) and per set averaged, and how much the zero-FA
 threshold and its false-reject rate move when the fingers are resampled
 (bootstrap over fingers, 5th-95th percentile). For part C matrices (big_eval_c_<set>_<matcher>*.npz): stranger
-score maximum and false accepts at the default threshold.
+score maximum and false accepts at the default threshold. For part S
+(big_eval_s_<matcher>*.npz, big_eval.py --synthetic): synthetic probes
+accepted at the default threshold and at the run's part B zero-FA
+threshold, and the max score per probe kind.
 
 "registered" genuine attempts are those whose probe impression could be
 registered to the enrollment impression, i.e. the probe patches cover the
 enrolled area; the others are dominated by probes that don't overlap it.
+
+Matrices derived from a per-stage store (derive_stages.py, run suffix _d<k>)
+are exact at and above their floor only: a threshold at or below it is an
+upper bound and is shown as "<=".
 
 Usage: summarize.py RESULTS_DIR
 """
@@ -56,6 +63,17 @@ def part_b(path):
             elif ident[j] != ident[own]:
                 imp.append(M[pi, j])
     return np.array(gen), np.array(reg), np.array(imp), np.array(gset), len(keep)
+
+
+def floor_of(path):
+    d = np.load(path, allow_pickle=False)
+    return int(d["floor"]) if "floor" in d.files else None
+
+
+def thr(t, floor, score=False):
+    """Threshold (or with @score, a score) @t, marked as an upper bound when a
+    derived matrix can't vouch for it: thresholds <= floor, scores < floor"""
+    return f"<={t}" if floor is not None and t < floor + (not score) else f"{t}"
 
 
 def threshold_at(hist, k):
@@ -159,7 +177,8 @@ def main():
         m = matchers.get(name)
         gen, reg, imp, gset, nfing = part_b(p)
         zt = int(imp.max()) + 1
-        print(f"| {name} | {run or '-'} | {nfing} | {imp.size} | {int(imp.max())} | {zt} "
+        fl = floor_of(p)
+        print(f"| {name} | {run or '-'} | {nfing} | {imp.size} | {thr(int(imp.max()), fl, True)} | {thr(zt, fl)} "
               f"| {100 * (gen[reg] < zt).mean():.1f}% | {100 * (gen < zt).mean():.1f}% "
               f"| {m.default} | {int((imp >= m.default).sum())} | {100 * (gen[reg] < m.default).mean():.1f}% |")
         r = defaultdict(lambda: [0, 0])
@@ -191,9 +210,10 @@ def main():
         for p in bs:
             name, run = matcher_of(p, "big_eval_b_")
             r = stats(p)
-            print(f"| {name} | {run or '-'} | {r['zt']} ({r['zt_lo']}-{r['zt_hi']}) "
+            fl = floor_of(p)
+            print(f"| {name} | {run or '-'} | {thr(r['zt'], fl)} ({r['zt_lo']}-{r['zt_hi']}) "
                   f"| {100 * r['frr']:.1f}% ({100 * r['frr_lo']:.1f}-{100 * r['frr_hi']:.1f}%) "
-                  f"| {r['kt']} (k={r['k']}) | {100 * r['frr_k']:.1f}% "
+                  f"| {thr(r['kt'], fl)} (k={r['k']}) | {100 * r['frr_k']:.1f}% "
                   f"| {100 * r['set_mean']:.1f}% ({r['nsets']} sets) "
                   f"| {'-' if r['tbytes'] is None else round(r['tbytes'])} |")
     ov = [(matcher_of(p, "big_eval_b_"), overlap_frr(p)) for p in bs]
@@ -218,8 +238,46 @@ def main():
             name, run = matcher_of(p, f"big_eval_c_{setname}_")
             m = matchers.get(name)
             M = np.load(p, allow_pickle=False)["M"]
-            print(f"| {setname} | {name} | {run or '-'} | {M.size} | {int(M.max())} "
+            print(f"| {setname} | {name} | {run or '-'} | {M.size} | {thr(int(M.max()), floor_of(p), True)} "
                   f"| {int((M >= m.default).sum())} | {m.default} |")
+    synthetic(out)
+
+
+def synthetic(out):
+    """Part S: synthetic probes accepted at the default threshold and at the
+    zero-FA threshold of the same run's part B, and the max score per kind."""
+    ss = sorted(glob.glob(os.path.join(out, "big_eval_s_*.npz")))
+    if not ss:
+        return
+    rows, kinds = [], {}
+    for p in ss:
+        name, run = matcher_of(p, "big_eval_s_")
+        m = matchers.get(name)
+        d = np.load(p, allow_pickle=False)
+        smax, kind, pn, bn = d["smax"], list(d["kind"]), list(d["names"]), list(d["sbest_name"])
+        b = os.path.join(out, f"big_eval_b_{name}{'_' + run if run else ''}.npz")
+        zt = int(part_b(b)[2].max()) + 1 if os.path.exists(b) else None
+        i = int(np.argmax(smax))
+        acc = (lambda t: f"{int((smax >= t).sum())} @ {t}")
+        rows.append(f"| {name} | {run or '-'} | {smax.size} | {int(smax[i])} ({pn[i]} vs {bn[i]}) "
+                    f"| {acc(m.default)} | {'-' if zt is None else acc(zt)} |")
+        kinds[(name, run)] = {k: int(smax[[j for j, x in enumerate(kind) if x == k]].max())
+                              for k in dict.fromkeys(kind)}
+    print("\n## Synthetic probes (part S)\n")
+    print("Blank, noise, gratings, checkerboards, inverted/mirrored enrolled patches and adversarial "
+          "frames (synthetic.py) against every template of B; a probe is accepted at threshold t if "
+          "its best score over all templates is >= t. Pass bar: none accepted.\n")
+    print("| matcher | run | probes | max score (probe vs template) | synthetic accepted at default threshold t "
+          "| synthetic accepted at B's zero-FA threshold t |")
+    print("|---|---|---|---|---|---|")
+    print("\n".join(rows))
+    cols = list(kinds)
+    allk = list(dict.fromkeys(k for v in kinds.values() for k in v))
+    print("\n### Max synthetic score per kind\n")
+    print("| kind | " + " | ".join(f"{n} {r}".strip() for n, r in cols) + " |")
+    print("|---|" + "---|" * len(cols))
+    for k in allk:
+        print(f"| {k} | " + " | ".join(str(kinds[c].get(k, "-")) for c in cols) + " |")
 
 
 if __name__ == "__main__":

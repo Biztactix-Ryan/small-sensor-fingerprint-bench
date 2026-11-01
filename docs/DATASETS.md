@@ -13,7 +13,7 @@ does not state it or states it wrongly.
 
 | | Sets | Fingers | Images |
 |---|---|---|---|
-| Enroll/verify (part B) | 20 | 4,813 | 23,028 |
+| Enroll/verify (part B) | 20 | 4,813 | 21,075 |
 | Strangers only (part C) | 2 | 7,500 | 7,500 |
 
 ## Enroll/verify (part B: genuine and impostor attempts)
@@ -30,7 +30,7 @@ does not state it or states it wrongly.
 | `tsinghua` | 320 × 2 (normal + distorted) | 449 dpi (measured) | public download, terms not stated | Tsinghua Distorted Fingerprint Database (TDFD), `https://ivg.au.tsinghua.edu.cn/dataset/samples_TDFD/TDFD/Tsinghua%20Distorted%20Fingerprint%20Database.zip` |
 | `unsw2d` | 1500 (150 subjects × 10) × 4 | 433 dpi (measured; the BMP headers say 500) | public download, research use only, cite | J. Hu, W. Zhou, *2D and 3D biometrics fingerprint dataset in contactless and labeled conditions*, Dryad, 2023, `https://doi.org/10.5061/dryad.612jm649q` (`2D_Database.7z` only) |
 | `polyu_cross` | 336 × 6; 160 of them also × 6 in a second session 2–24 months later | 512 dpi (sensor; see SCALING.md) | research and non-commercial use only, cite | C. Lin, A. Kumar, *Matching Contactless and Contact-based Conventional Fingerprint Images for Biometrics Identification*, IEEE TIP 27, 2018: The Hong Kong Polytechnic University Contactless 2D to Contact-based 2D Fingerprint Images Database, contact-based part only |
-| `nist302_plain` | 2000 (200 people × 10) × 2–7 plain impressions, each from a different device (most 5–7) | 500 dpi | NIST, on request; terms agreed when obtaining it (no redistribution) | NIST Special Database 302, `https://nigos.nist.gov/datasets/sd302/request`: part d (auxiliary plain captures, devices K, L, M, P), part b's segmented slaps (devices R, S) and part c's fingers segmented from palm captures (devices J, N, Q; no thumbs), 500 ppi only |
+| `nist302_plain` | 2000 (200 people × 10) × 1–6 plain impressions, each from a different device (most 4–6) | 500 dpi | NIST, on request; terms agreed when obtaining it (no redistribution) | NIST Special Database 302, `https://nigos.nist.gov/datasets/sd302/request`: part d (auxiliary plain captures, devices K, L, M, P; L not used, below), part b's segmented slaps (devices R, S) and part c's fingers segmented from palm captures (devices J, N, Q; no thumbs), 500 ppi only |
 
 Identities and data fixes (`public_sets.identity()` and `index()`):
 
@@ -49,6 +49,22 @@ Identities and data fixes (`public_sets.identity()` and `index()`):
   enrolled from one and verified with the other.
 - NIST SD 302: thumbs swapped per its errata (00002302 device L, 00002534
   and 00002561 device S, 00002420 device R).
+- NIST SD 302 device L is not used: its images (a larger, processed-looking
+  capture) don't register to any other device's impression of the same
+  finger, on whole images, with or without mirroring, inverting, rescaling
+  or smoothing (1 of 110 sampled pairs). Kept, they would only measure that.
+- NIST SD 302 enrollment order: impressions are ordered by device, M, K,
+  S, R, P, N, Q, J, so the enrollment reference is the cleanest capture
+  available; palm-segmented J images are sometimes nearly blank.
+- Registration of a probe to its enrollment impression (`big_eval.aligned_centre()`)
+  uses CLAHE and rejects fits with a scale outside 0.85–1.15, a rotation
+  over 45° or the identity (keypoints on a sensor's fixed pattern) unless
+  the finger really is in the same place. This applies to every set, so
+  registered-FRR numbers from earlier runs aren't directly comparable with
+  the final run. Registered impressions, old → new: NIST SD 302 74.6% →
+  85.0% (same probes, device L already dropped; the 23% of the smoke test
+  also had device L), UNSW 2D 97.6% → 97.6%, FVC2004 DB2 80.0% → 47.1%
+  (the old fits were on its fixed pattern).
 
 Expected layout:
 
